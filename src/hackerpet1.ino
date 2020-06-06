@@ -139,6 +139,21 @@ void unsetManuallyTriggered()
   isManuallyTriggered = false;
 }
 
+bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionTime, int countSuccesses, int countMisses, bool challengeComplete)
+{
+  char report[621];
+  String taken_string;
+  if (foodtreatWasEaten == 1)
+  {
+    taken_string = "and she ate the treat!";
+  }
+  else
+  {
+    taken_string = "but she didn't eat the treat.";
+  }
+  snprintf(report, sizeof(report), "She played! Reaction time was %d seconds, %s", reactionTime, taken_string.c_str());
+  return Particle.publish("hackerpet-push", report, 60, PRIVATE);
+}
 /// reset performance history to 0
 void resetPerformanceHistory()
 {
@@ -177,7 +192,7 @@ void printPerformanceArray()
 bool isBusinessHours()
 {
   hourOfTheDay = Time.hour();
-  return hourOfTheDay >= 8 && hourOfTheDay <= 22;
+  return hourOfTheDay >= 8 && hourOfTheDay < 22;
 }
 
 /// The actual EngagingConsistently challenge. This function needs to be called in a loop.
@@ -352,6 +367,7 @@ bool playEngagingConsistently()
       foodtreatWasEaten,                                    // foodtreatWasEaten
       extra                                                 // extra field
   );
+  sendPushNotification(currentLevel, foodtreatWasEaten, reactionTime, countSuccesses(), countMisses(), challengeComplete);
 
   // printPerformanceArray();
 
@@ -376,6 +392,11 @@ void setup()
   Particle.variable("currentLevel", currentLevel);
   Particle.variable("hourOfTheDay", hourOfTheDay);
   Particle.variable("isPaused", isPaused);
+
+  hub.PlayAudio(hub.AUDIO_ENTICE, 99);
+  char report[621];
+  snprintf(report, sizeof(report), "CleverPet booted with %s", __FILE__);
+  Particle.publish("hackerpet-push", report, 60);
 }
 
 /**
@@ -402,11 +423,11 @@ void loop()
 
   while (isBusinessHours() == false || isPaused == true)
   {
-    hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0);
+    hub.SetLightEnabled(false);
     delay(1000);
     return;
   }
-  hub.SetRandomButtonLights(3, YELLOW, BLUE, FLASHING, FLASHING_DUTY_CYCLE);
+  hub.SetLightEnabled(true);
 
   // Keep playing interactions as long as timer didn't expire
   if (millis() <= (challenge_timer_before + challenge_timer_length))
