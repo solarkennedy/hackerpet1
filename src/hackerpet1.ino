@@ -48,6 +48,7 @@ const char PlayerName[] = "Pet, Clever";
 int currentLevel = 1; // starting level
 int hourOfTheDay = 0;
 bool isPaused = false;
+volatile bool isManuallyTriggered = false;
 
 const int MAX_LEVEL = 3;
 const unsigned long CHALLENGE_TIMER_DURATIONS[MAX_LEVEL] = {600000,  // level 1: 10 mins
@@ -128,6 +129,15 @@ int functionUnpause(String command)
   isPaused = false;
   return 0;
 };
+int functionManuallyTriggered(String command)
+{
+  isManuallyTriggered = true;
+  return 0;
+}
+void unsetManuallyTriggered()
+{
+  isManuallyTriggered = false;
+}
 
 /// reset performance history to 0
 void resetPerformanceHistory()
@@ -229,8 +239,14 @@ bool playEngagingConsistently()
     pressed = hub.AnyButtonPressed();
     yield(false);
   } while ((pressed != hub.BUTTON_LEFT && pressed != hub.BUTTON_MIDDLE &&
-            pressed != hub.BUTTON_RIGHT) &&
+            pressed != hub.BUTTON_RIGHT && isManuallyTriggered != true) &&
            millis() < (timestampBefore + timeout_duration));
+
+  if (isManuallyTriggered == true)
+  {
+    pressed = 1;
+    unsetManuallyTriggered();
+  }
 
   // Record time period for performance logging
   reactionTime = millis() - timestampBefore;
@@ -352,8 +368,11 @@ void setup()
 {
   // Initializes the hub and passes the current filename as ID for reporting
   hub.Initialize(__FILE__);
+
   Particle.function("pause", functionPause);
   Particle.function("unpause", functionUnpause);
+  Particle.function("manuallyTrigger", functionManuallyTriggered);
+
   Particle.variable("currentLevel", currentLevel);
   Particle.variable("hourOfTheDay", hourOfTheDay);
   Particle.variable("isPaused", isPaused);
