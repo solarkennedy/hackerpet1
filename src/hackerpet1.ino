@@ -129,6 +129,7 @@ int functionUnpause(String command)
   isPaused = false;
   return 0;
 };
+
 int functionManuallyTriggered(String command)
 {
   isManuallyTriggered = true;
@@ -137,6 +138,12 @@ int functionManuallyTriggered(String command)
 void unsetManuallyTriggered()
 {
   isManuallyTriggered = false;
+}
+
+int functionPlaySound(String command)
+{
+  int audio_id = command.toInt();
+  return hub.PlayAudio(audio_id, 99);
 }
 
 bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionTime, int countSuccesses, int countMisses, bool challengeComplete)
@@ -388,6 +395,7 @@ void setup()
   Particle.function("pause", functionPause);
   Particle.function("unpause", functionUnpause);
   Particle.function("manuallyTrigger", functionManuallyTriggered);
+  Particle.function("playSound", functionPlaySound);
 
   Particle.variable("currentLevel", currentLevel);
   Particle.variable("hourOfTheDay", hourOfTheDay);
