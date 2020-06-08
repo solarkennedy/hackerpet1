@@ -156,12 +156,13 @@ bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionT
   }
   else
   {
-    taken_string = "but she didn't eat the treat.";
+    taken_string = "But she didn't eat the treat.";
   }
-  snprintf(report, sizeof(report), "She played! Reaction time was %d seconds, %s", reactionTime, taken_string.c_str());
+  snprintf(report, sizeof(report), "She played! %s", taken_string.c_str());
   return Particle.publish("hackerpet-push", report, 60, PRIVATE);
 }
-/// reset performance history to 0
+
+// reset performance history to 0
 void resetPerformanceHistory()
 {
   for (unsigned char i = 0; i < HISTORY_LENGTH; i++)
@@ -170,7 +171,7 @@ void resetPerformanceHistory()
   perfDepth = 0;
 }
 
-/// add an interaction result to the performance history
+// add an interaction result to the performance history
 void addResultToPerformanceHistory(bool entry)
 {
   // Log.info("Adding %u", entry);
@@ -264,12 +265,6 @@ bool playEngagingConsistently()
             pressed != hub.BUTTON_RIGHT && isManuallyTriggered != true) &&
            millis() < (timestampBefore + timeout_duration));
 
-  if (isManuallyTriggered == true)
-  {
-    pressed = 1;
-    unsetManuallyTriggered();
-  }
-
   // Record time period for performance logging
   reactionTime = millis() - timestampBefore;
 
@@ -277,15 +272,15 @@ bool playEngagingConsistently()
   hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0);
 
   // Check result
-  if (pressed == 0)
+  if (pressed == 0 && !isManuallyTriggered)
   {
-    Log.info("No touchpad pressed, we have a timeout");
+    Log.info("No touchpad pressed, we have a timeout or a manual trigger");
     timeout = true;
     foodtreatWasEaten = false;
   }
   else
   {
-    Log.info("Button pressed, dispensing foodtreat");
+    Log.info("Button or manual trigger pressed, dispensing foodtreat");
     timeout = false;
 
     // give the Hub a moment to finish playing the touchpad sound
@@ -354,30 +349,31 @@ bool playEngagingConsistently()
     }
   }
 
-  // Send report
-  Log.info("Sending report");
-  String extra = String::format(
-      "{\"pos_tries\":%u,\"neg_tries\":%u", countSuccesses(), countMisses());
-  if (challengeComplete)
+  if (timeout != true && isManuallyTriggered != true)
   {
-    extra += ",\"challengeComplete\":1";
+    // Send report
+    Log.info("Sending report");
+    String extra = String::format(
+        "{\"pos_tries\":%u,\"neg_tries\":%u", countSuccesses(), countMisses());
+    if (challengeComplete)
+      extra += ",\"challengeComplete\":1";
+    extra += "}";
+    hub.Report(
+        Time.format(gameStartTime, TIME_FORMAT_ISO8601_FULL), // play_start_time
+        PlayerName,                                           // player
+        currentLevel,                                         // level //TODO is this the correct level?
+        String(foodtreatWasEaten),                            // result
+        reactionTime,                                         // duration -> linked to level and includes tray movement
+        1,                                                    // foodtreat_presented
+        foodtreatWasEaten,                                    // foodtreatWasEaten
+        extra                                                 // extra field
+    );
+    sendPushNotification(currentLevel, foodtreatWasEaten, reactionTime, countSuccesses(), countMisses(), challengeComplete);
+    printPerformanceArray();
   }
-  extra += "}";
 
-  hub.Report(
-      Time.format(gameStartTime, TIME_FORMAT_ISO8601_FULL), // play_start_time
-      PlayerName,                                           // player
-      currentLevel,                                         // level //TODO is this the correct level?
-      String(foodtreatWasEaten),                            // result
-      reactionTime,                                         // duration -> linked to level and includes tray movement
-      1,                                                    // foodtreat_presented
-      foodtreatWasEaten,                                    // foodtreatWasEaten
-      extra                                                 // extra field
-  );
-  sendPushNotification(currentLevel, foodtreatWasEaten, reactionTime, countSuccesses(), countMisses(), challengeComplete);
-
-  // printPerformanceArray();
-
+  if (isManuallyTriggered == true)
+    unsetManuallyTriggered();
   hub.SetDIResetLock(false); // allow DI board to reset if needed between interactions
   yield_finish();
   return true;
