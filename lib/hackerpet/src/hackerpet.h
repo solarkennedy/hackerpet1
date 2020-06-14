@@ -596,7 +596,7 @@ public:
   static const int TRAY_SPEED = 1;
   static const int TRAY_CURRENT_THRESHOLD = 200;
   static const int FOODTREAT_TX_POWER_LEVEL = 0;    //0 = low (default), 1 = medium, 2 = high
-  static const int FOODTREAT_DETECT_THRESHOLD = 23; // 60 (default), 40 (addresses empty dish issues)
+  static const int FOODTREAT_DETECT_THRESHOLD = 30; // 60 (default), 40 (addresses empty dish issues)
 
   // these are constants in the dl firmware:
   static const int PLATTER_MOTOR_MAX_DUTY_CYCLE = 100;

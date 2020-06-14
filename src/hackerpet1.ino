@@ -219,6 +219,7 @@ bool playEngagingConsistently()
   static bool timeout = false;
   static bool challengeComplete = false; // do not re-initialize
   static int tray_duration = 32000;
+  static int duration = 0;
   static int timeout_duration = 300000; // 5 mins
   static unsigned char pressed = 0;     // to hold the pressed touchpad
 
@@ -291,14 +292,26 @@ bool playEngagingConsistently()
     // give the Hub a moment to finish playing the touchpad sound
     yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
     // Play "reward" sound
-    hub.PlayAudio(hub.AUDIO_POSITIVE, 99);
-    // give the Hub a moment to finish playing the reward sound
-    //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
+
+    if (isManuallyTriggered == true)
+    {
+      hub.PlayAudio(hub.AUDIO_CLICK, 99);
+      // give the Hub a moment to finish playing the reward sound
+      //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
+      duration = 320000;
+    }
+    else
+    {
+      hub.PlayAudio(hub.AUDIO_POSITIVE, 99);
+      // give the Hub a moment to finish playing the reward sound
+      //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
+      duration = tray_duration;
+    }
 
     // Dispense a foodtreat and wait until the tray is closed again
     do
     {
-      foodtreatState = hub.PresentAndCheckFoodtreat(tray_duration);
+      foodtreatState = hub.PresentAndCheckFoodtreat(duration);
       yield(false);
     } while (foodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
              foodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
