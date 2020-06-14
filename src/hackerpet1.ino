@@ -146,6 +146,11 @@ int functionPlaySound(String command)
   return hub.PlayAudio(audio_id, 99);
 }
 
+int functionReboot(String command)
+{
+  System.reset();
+}
+
 bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionTime, int countSuccesses, int countMisses, bool challengeComplete)
 {
   char report[621];
@@ -392,6 +397,7 @@ void setup()
   Particle.function("unpause", functionUnpause);
   Particle.function("manuallyTrigger", functionManuallyTriggered);
   Particle.function("playSound", functionPlaySound);
+  Particle.function("reboot", functionReboot);
 
   Particle.variable("currentLevel", currentLevel);
   Particle.variable("hourOfTheDay", hourOfTheDay);
