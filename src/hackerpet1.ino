@@ -205,7 +205,7 @@ void printPerformanceArray()
 bool isBusinessHours()
 {
   hourOfTheDay = Time.hour();
-  return hourOfTheDay >= 8 && hourOfTheDay < 22;
+  return hourOfTheDay >= 8 && hourOfTheDay <= 22;
 }
 
 /// The actual EngagingConsistently challenge. This function needs to be called in a loop.
@@ -431,13 +431,13 @@ void loop()
     reset_challenge_timer = false;
   }
 
-  while (isBusinessHours() == false || isPaused == true)
-  {
-    hub.SetLightEnabled(false);
-    delay(1000);
-    return;
-  }
-  hub.SetLightEnabled(true);
+  // while (isBusinessHours() == false || isPaused == true)
+  // {
+  //   hub.SetLightEnabled(false);
+  //   delay(1000);
+  //   return;
+  // }
+  // hub.SetLightEnabled(true);
 
   // Keep playing interactions as long as timer didn't expire
   if (millis() <= (challenge_timer_before + challenge_timer_length))
