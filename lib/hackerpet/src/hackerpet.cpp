@@ -1831,7 +1831,7 @@ bool HubInterface::_parse_msg(unsigned char token, unsigned char rplystatus, cha
                 _hub_out_of_food = true;
                 UpdateButtonAudioEnabled();
                 IndicatorState = IL_DLI_OOF;
-
+                Particle.publish("hackerpet-push", "Machine out of food!", 60, PRIVATE);
                 // SetLights(); //Set yellow flashy top light
             }
         }
@@ -1905,7 +1905,7 @@ bool HubInterface::_parse_msg(unsigned char token, unsigned char rplystatus, cha
                 _singulator_error = true;
                 UpdateButtonAudioEnabled();
                 IndicatorState = IL_DLI_JAM_ERROR;
-
+                Particle.publish("hackerpet-push", "Food JAM!", 60, PRIVATE);
                 // SetLights(); //Set yellow flashy top light
             }
         }
