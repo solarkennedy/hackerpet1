@@ -38,6 +38,12 @@
 // Set this to the name of your player (dog, cat, etc.)
 const char PlayerName[] = "Pet, Clever";
 
+// # Custom Stuff
+int currentLevel = 1; // starting level
+int hourOfTheDay = 0;
+bool isPaused = false;
+volatile bool isManuallyTriggered = false;
+
 /**
  * Challenge settings
  * -------------
@@ -45,10 +51,6 @@ const char PlayerName[] = "Pet, Clever";
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-int currentLevel = 1; // starting level
-int hourOfTheDay = 0;
-bool isPaused = false;
-volatile bool isManuallyTriggered = false;
 
 const int MAX_LEVEL = 3;
 const unsigned long CHALLENGE_TIMER_DURATIONS[MAX_LEVEL] = {600000,  // level 1: 10 mins
@@ -119,6 +121,7 @@ unsigned int countMisses()
   return total;
 }
 
+// Custom Functions
 int functionPause(String command)
 {
   isPaused = true;
@@ -129,7 +132,6 @@ int functionUnpause(String command)
   isPaused = false;
   return 0;
 };
-
 int functionManuallyTriggered(String command)
 {
   isManuallyTriggered = true;
@@ -139,18 +141,15 @@ void unsetManuallyTriggered()
 {
   isManuallyTriggered = false;
 }
-
 int functionPlaySound(String command)
 {
   int audio_id = command.toInt();
   return hub.PlayAudio(audio_id, 99);
 }
-
 int functionReboot(String command)
 {
   System.reset();
 }
-
 bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionTime, int countSuccesses, int countMisses, bool challengeComplete)
 {
   char report[621];
@@ -165,6 +164,28 @@ bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionT
   }
   snprintf(report, sizeof(report), "She played! %s", taken_string.c_str());
   return Particle.publish("hackerpet-push", report, 60, PRIVATE);
+}
+bool isBusinessHours()
+{
+  hourOfTheDay = Time.hour();
+  return hourOfTheDay >= 8 && hourOfTheDay <= 22;
+}
+void registerCustomStuff()
+{
+  Particle.function("pause", functionPause);
+  Particle.function("unpause", functionUnpause);
+  Particle.function("manuallyTrigger", functionManuallyTriggered);
+  Particle.function("playSound", functionPlaySound);
+  Particle.function("reboot", functionReboot);
+
+  Particle.variable("currentLevel", currentLevel);
+  Particle.variable("hourOfTheDay", hourOfTheDay);
+  Particle.variable("isPaused", isPaused);
+
+  hub.PlayAudio(hub.AUDIO_ENTICE, 99);
+  char report[621];
+  snprintf(report, sizeof(report), "CleverPet booted with %s", __FILE__);
+  Particle.publish("hackerpet-push", report, 60);
 }
 
 // reset performance history to 0
@@ -200,12 +221,6 @@ void printPerformanceArray()
   for (unsigned char i = 0; i < HISTORY_LENGTH; i++)
     Serial.printf("%u", performance[i]);
   Serial.printf("\n");
-}
-
-bool isBusinessHours()
-{
-  hourOfTheDay = Time.hour();
-  return hourOfTheDay >= 8 && hourOfTheDay <= 22;
 }
 
 /// The actual EngagingConsistently challenge. This function needs to be called in a loop.
@@ -387,11 +402,11 @@ bool playEngagingConsistently()
         extra                                                 // extra field
     );
     sendPushNotification(currentLevel, foodtreatWasEaten, reactionTime, countSuccesses(), countMisses(), challengeComplete);
-    printPerformanceArray();
   }
 
   if (isManuallyTriggered == true)
     unsetManuallyTriggered();
+
   hub.SetDIResetLock(false); // allow DI board to reset if needed between interactions
   yield_finish();
   return true;
@@ -405,21 +420,7 @@ void setup()
 {
   // Initializes the hub and passes the current filename as ID for reporting
   hub.Initialize(__FILE__);
-
-  Particle.function("pause", functionPause);
-  Particle.function("unpause", functionUnpause);
-  Particle.function("manuallyTrigger", functionManuallyTriggered);
-  Particle.function("playSound", functionPlaySound);
-  Particle.function("reboot", functionReboot);
-
-  Particle.variable("currentLevel", currentLevel);
-  Particle.variable("hourOfTheDay", hourOfTheDay);
-  Particle.variable("isPaused", isPaused);
-
-  hub.PlayAudio(hub.AUDIO_ENTICE, 99);
-  char report[621];
-  snprintf(report, sizeof(report), "CleverPet booted with %s", __FILE__);
-  Particle.publish("hackerpet-push", report, 60);
+  registerCustomStuff();
 }
 
 /**
@@ -443,14 +444,6 @@ void loop()
     challenge_timer_length = CHALLENGE_TIMER_DURATIONS[currentLevel - 1];
     reset_challenge_timer = false;
   }
-
-  // while (isBusinessHours() == false || isPaused == true)
-  // {
-  //   hub.SetLightEnabled(false);
-  //   delay(1000);
-  //   return;
-  // }
-  // hub.SetLightEnabled(true);
 
   // Keep playing interactions as long as timer didn't expire
   if (millis() <= (challenge_timer_before + challenge_timer_length))
