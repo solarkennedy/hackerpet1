@@ -35,33 +35,34 @@ const char playerName[] = "Pet, Clever";
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-int currentLevel = 4;        // level to start at
-const int ANCHOR_LEVEL = 4;  // "Anchor" level (will fall back here if level is
-                             // high and foodtreat is eaten)
-const int ENOUGH_SUCCESSES = 3;  // Number of interactions required to proceed
-const int HISTORY_LENGTH = 5;    // Number of interactions to keep track of
-const int MAX_LEVEL = 6;         // Length of the FOODTREAT_DURATIONS array
+int currentLevel = 4;           // level to start at
+const int ANCHOR_LEVEL = 4;     // "Anchor" level (will fall back here if level is
+                                // high and foodtreat is eaten)
+const int ENOUGH_SUCCESSES = 3; // Number of interactions required to proceed
+const int HISTORY_LENGTH = 5;   // Number of interactions to keep track of
+const int MAX_LEVEL = 6;        // Length of the FOODTREAT_DURATIONS array
 const unsigned long FOODTREAT_DURATIONS[MAX_LEVEL] = {192000, 96000, 48000,
-                                                      24000,  12000, 6000};
+                                                      24000, 12000, 6000};
 
 /**
  * Global variables and constants
  * ------------------------------
  */
-const unsigned long SOUND_FOODTREAT_DELAY = 1200;  // (ms) delay for reward
-                                                   // sound
+const unsigned long SOUND_FOODTREAT_DELAY = 1200; // (ms) delay for reward
+                                                  // sound
 
-int performance[HISTORY_LENGTH] = {0};  // store the progress in this challenge
-int perfPos = 0;                        // position in the performance array
-bool foodtreatWasEaten = false;  // store if foodtreat was eaten in last interaction
-bool challengeComplete = false; // do not re-initialize
+int performance[HISTORY_LENGTH] = {0}; // store the progress in this challenge
+int perfPos = 0;                       // position in the performance array
+bool foodtreatWasEaten = false;        // store if foodtreat was eaten in last interaction
+bool challengeComplete = false;        // do not re-initialize
 
 // Use primary serial over USB interface for logging output (9600)
 // Choose logging level here (ERROR, WARN, INFO)
-SerialLogHandler logHandler(LOG_LEVEL_INFO, { // Logging level for all messages
-    { "app.hackerpet", LOG_LEVEL_ERROR }, // Logging level for library messages
-    { "app", LOG_LEVEL_INFO } // Logging level for application messages
-});
+SerialLogHandler logHandler(LOG_LEVEL_INFO, {
+                                                // Logging level for all messages
+                                                {"app.hackerpet", LOG_LEVEL_ERROR}, // Logging level for library messages
+                                                {"app", LOG_LEVEL_INFO}             // Logging level for application messages
+                                            });
 
 // access to hub functionality (lights, foodtreats, etc.)
 HubInterface hub;
@@ -75,7 +76,8 @@ SYSTEM_THREAD(ENABLED);
  */
 
 /// The actual Eating The Food challenge. Function must be be called in a loop.
-bool playEatingTheFood() {
+bool playEatingTheFood()
+{
   yield_begin();
 
   static unsigned long gameStartTime, timestampBefore, activityDuration = 0;
@@ -120,7 +122,8 @@ bool playEatingTheFood() {
   yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
 
   // dispense a foodtreat and wait until the tray is closed again
-  do {
+  do
+  {
     foodtreatState =
         hub.PresentAndCheckFoodtreat(FOODTREAT_DURATIONS[currentLevel - 1]);
     yield(false);
@@ -132,50 +135,64 @@ bool playEatingTheFood() {
   activityDuration = millis() - timestampBefore;
 
   // check if foodtreat was eaten
-  if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN) {
+  if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
+  {
     Log.info("Foodtreat was eaten, reaction time: %lu", activityDuration);
     foodtreatWasEaten = true;
-  } else {
+  }
+  else
+  {
     Log.info("Foodtreat not eaten");
     foodtreatWasEaten = false;
   }
 
   // send report
   Log.info("Sending report");
-  
+
   String extra = "{";
-  if (challengeComplete) {extra += ",\"challengeComplete\":1";}
+  if (challengeComplete)
+  {
+    extra += ",\"challengeComplete\":1";
+  }
   extra += "}";
 
   hub.Report(
-      Time.format(gameStartTime, TIME_FORMAT_ISO8601_FULL),  // play_start_time
-      playerName,                                            // player
-      currentLevel,               // level -> lower level is better
-      String(foodtreatWasEaten),  // result
-      activityDuration,  // duration -> linked to level and includes tray
-                         // movement
-      1,                 // foodtreat_presented
-      foodtreatWasEaten,  // foodtreat_eaten
-      extra              // extra field
+      Time.format(gameStartTime, TIME_FORMAT_ISO8601_FULL), // play_start_time
+      playerName,                                           // player
+      currentLevel,                                         // level -> lower level is better
+      String(foodtreatWasEaten),                            // result
+      activityDuration,                                     // duration -> linked to level and includes tray
+                                                            // movement
+      1,                                                    // foodtreat_presented
+      foodtreatWasEaten,                                    // foodtreat_eaten
+      extra                                                 // extra field
   );
 
   // decide if level is going up or down
-  if (foodtreatWasEaten == true) {
-    if (currentLevel < MAX_LEVEL) {
-      if (currentLevel < ANCHOR_LEVEL) {
-        currentLevel = ANCHOR_LEVEL;  // Jump to the anchor level
-      } else {
-        currentLevel++;  // Let's go faster!
+  if (foodtreatWasEaten == true)
+  {
+    if (currentLevel < MAX_LEVEL)
+    {
+      if (currentLevel < ANCHOR_LEVEL)
+      {
+        currentLevel = ANCHOR_LEVEL; // Jump to the anchor level
+      }
+      else
+      {
+        currentLevel++; // Let's go faster!
       }
     }
-  } else {
-    if (currentLevel > 1) {
-      currentLevel--;  // Foodtreat not eaten, increase the foodtreat offer
-                       // time.
+  }
+  else
+  {
+    if (currentLevel > 1)
+    {
+      currentLevel--; // Foodtreat not eaten, increase the foodtreat offer
+                      // time.
     }
   }
-  hub.SetDIResetLock(false);  // allow DI board to reset if needed between
-                              // interactions
+  hub.SetDIResetLock(false); // allow DI board to reset if needed between
+                             // interactions
   yield_finish();
   return true;
 }
@@ -184,7 +201,8 @@ bool playEatingTheFood() {
  * Setup function
  * --------------
  */
-void setup() {
+void setup()
+{
   // Initializes the hub and passes the current filename as ID for reporting
   hub.Initialize(__FILE__);
   // You can also pass your own ID like so
@@ -195,9 +213,10 @@ void setup() {
  * Main loop function
  * ------------------
  */
-void loop() {
-  unsigned int perf_total = 0;  // sum of performance of the
-                                // HISTORY_LENGTH last interactions
+void loop()
+{
+  unsigned int perf_total = 0; // sum of performance of the
+                               // HISTORY_LENGTH last interactions
   bool gameIsComplete = false;
 
   // Advance the device layer state machine, but with 20 ms max time
@@ -205,27 +224,32 @@ void loop() {
   hub.Run(20);
 
   // Play 1 level of the Eating The Food challenge
-  gameIsComplete = playEatingTheFood();  // Will return true if level is done
+  gameIsComplete = playEatingTheFood(); // Will return true if level is done
 
   // Store level result in performance array
-  if (gameIsComplete) {
-    performance[perfPos] = foodtreatWasEaten;  // store the interaction result
-                                               // in the performance array
+  if (gameIsComplete)
+  {
+    performance[perfPos] = foodtreatWasEaten; // store the interaction result
+                                              // in the performance array
     perfPos++;
-    if (perfPos > (HISTORY_LENGTH - 1)) {  // make our performance array circular
+    if (perfPos > (HISTORY_LENGTH - 1))
+    { // make our performance array circular
       perfPos = 0;
     }
   }
 
   // Check performance array if we're ready to pass to next challenge
-  for (int i = 0; i < HISTORY_LENGTH; ++i) {
+  for (int i = 0; i < HISTORY_LENGTH; ++i)
+  {
     perf_total += performance[i];
-    if (perf_total >= ENOUGH_SUCCESSES) {
+    if (perf_total >= ENOUGH_SUCCESSES)
+    {
       Log.info("Challenge completed!");
       challengeComplete = true;
       // reset performance
       perf_total = 0;
-      for (unsigned char i = 0; i < HISTORY_LENGTH; ++i) performance[i] = 0;
+      for (unsigned char i = 0; i < HISTORY_LENGTH; ++i)
+        performance[i] = 0;
     }
   }
 }

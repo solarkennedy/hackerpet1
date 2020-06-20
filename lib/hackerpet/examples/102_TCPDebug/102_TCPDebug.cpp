@@ -20,8 +20,8 @@ unsigned long last_timestamp;
 SYSTEM_THREAD(ENABLED);
 
 TCPClient client;
-byte server[] = { 192, 168, 0, 227 };  //Change to the IP that listens for debug connection
-int port = 4888;                       //Port where the receiver listens
+byte server[] = {192, 168, 0, 227}; //Change to the IP that listens for debug connection
+int port = 4888;                    //Port where the receiver listens
 String logString;
 
 //Write the message over the TCP connection if it is connected
@@ -42,7 +42,7 @@ void setup()
     Particle.variable("logString", logString);
     Particle.publish("start-game");
 
-    Serial.begin(9600);  // for debug text output
+    Serial.begin(9600); // for debug text output
 
     // Initializes the hub and passes the current filename as ID for reporting
     hub.Initialize(__FILE__);
@@ -52,7 +52,8 @@ void setup()
         logString = "connected ";
         logString += millis();
         client.println("Connected ...");
-    } else
+    }
+    else
     {
         logString = "did not connect ";
         logString += millis();
@@ -64,13 +65,13 @@ void setup()
 // run-loop function required for Particle
 void loop()
 {
-  // advance the device layer state machine, but with 20 millisecond max time
-  // spent per loop cycle
-  hub.Run(20);
+    // advance the device layer state machine, but with 20 millisecond max time
+    // spent per loop cycle
+    hub.Run(20);
 
-  if (millis() - last_timestamp > 1000) {
-    remotePrintLn("Next message");
-    last_timestamp = millis();
+    if (millis() - last_timestamp > 1000)
+    {
+        remotePrintLn("Next message");
+        last_timestamp = millis();
     }
-
 }

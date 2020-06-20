@@ -23,10 +23,11 @@ SYSTEM_THREAD(ENABLED);
 
 // Use primary serial over USB interface for logging output (9600)
 // Choose logging level here (ERROR, WARN, INFO)
-SerialLogHandler logHandler(LOG_LEVEL_INFO, { // Logging level for all messages
-    { "app.hackerpet", LOG_LEVEL_ERROR }, // Logging level for library messages
-    { "app", LOG_LEVEL_INFO } // Logging level for application messages
-});
+SerialLogHandler logHandler(LOG_LEVEL_INFO, {
+												// Logging level for all messages
+												{"app.hackerpet", LOG_LEVEL_ERROR}, // Logging level for library messages
+												{"app", LOG_LEVEL_INFO}				// Logging level for application messages
+											});
 
 // access to hub functionality (lights, foodtreats, etc.)
 HubInterface hub;
@@ -49,45 +50,64 @@ bool ready = false;
 
 void setup()
 {
-    Serial1.begin(38400);  // needed for device layer (hub) communication
-    Log.info("Starting audio testing firmware");
+	Serial1.begin(38400); // needed for device layer (hub) communication
+	Log.info("Starting audio testing firmware");
 
-    // Initializes the hub and passes the current filename as ID for reporting
-    hub.Initialize(__FILE__);
+	// Initializes the hub and passes the current filename as ID for reporting
+	hub.Initialize(__FILE__);
 
-    hub.SetButtonAudioEnabled(false); // disable the standard button sounds
+	hub.SetButtonAudioEnabled(false); // disable the standard button sounds
 }
 
-void loop() {
-    // advance the device layer state machine, but with 20 millisecond max time
-    // spent per loop cycle
-    hub.Run(20);
+void loop()
+{
+	// advance the device layer state machine, but with 20 millisecond max time
+	// spent per loop cycle
+	hub.Run(20);
 
-    // wait for unpressed state
-    if (hub.IsReady() && (hub.AnyButtonPressed()==0))
-    { ready = true;}
+	// wait for unpressed state
+	if (hub.IsReady() && (hub.AnyButtonPressed() == 0))
+	{
+		ready = true;
+	}
 
 	// check if touchpad is being pressed
-    if(ready && hub.AnyButtonPressed() != 0){
-    	ready = false;
-   		pressed = hub.AnyButtonPressed(); // check which touchpad is pressed
-   		hub.SetLightsRGB(pressed, 99, 0, 0, 0); // turn on touchpad light
-   		if(pressed == hub.BUTTON_LEFT){ // decrease volume
-   			if(volume < 10){volume = 0;}
-   			else{volume = volume - 10;}
-   			Log.info("Volume: %u", volume);
-   		}
-   		if(pressed == hub.BUTTON_MIDDLE){ // select next sample
-   			Log.info("Next audiosample");
-   			sample_num++;
-   			if(sample_num > 9){sample_num = 1;}
-   		}
-   		if(pressed == hub.BUTTON_RIGHT){ // increase volume
-   			volume = volume + 10;
-   			if(volume > 89){volume = 90;}
-   			Log.info("Volume: %u", volume);
-   		}
-   		hub.PlayAudio(sample_num, volume);	// play the sample
-   		hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0);  // turn off lights
-    }
+	if (ready && hub.AnyButtonPressed() != 0)
+	{
+		ready = false;
+		pressed = hub.AnyButtonPressed();		// check which touchpad is pressed
+		hub.SetLightsRGB(pressed, 99, 0, 0, 0); // turn on touchpad light
+		if (pressed == hub.BUTTON_LEFT)
+		{ // decrease volume
+			if (volume < 10)
+			{
+				volume = 0;
+			}
+			else
+			{
+				volume = volume - 10;
+			}
+			Log.info("Volume: %u", volume);
+		}
+		if (pressed == hub.BUTTON_MIDDLE)
+		{ // select next sample
+			Log.info("Next audiosample");
+			sample_num++;
+			if (sample_num > 9)
+			{
+				sample_num = 1;
+			}
+		}
+		if (pressed == hub.BUTTON_RIGHT)
+		{ // increase volume
+			volume = volume + 10;
+			if (volume > 89)
+			{
+				volume = 90;
+			}
+			Log.info("Volume: %u", volume);
+		}
+		hub.PlayAudio(sample_num, volume);		// play the sample
+		hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off lights
+	}
 }

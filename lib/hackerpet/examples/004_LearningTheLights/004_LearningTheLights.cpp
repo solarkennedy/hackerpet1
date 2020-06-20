@@ -37,36 +37,37 @@ const char PlayerName[] = "Pet, Clever";
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-int currentLevel = 1;          // current and starting level
-const int MAX_LEVEL = 1;         // Maximum number of levels
-const int HISTORY_LENGTH = 50;   // Number of previous interactions to look at for
-                                // performance
-const int ENOUGH_SUCCESSES = 30; // if num successes >= ENOUGH_SUCCESSES level-up
-const unsigned long FOODTREAT_DURATION = 5000;   // (ms) how long to present
-                                                // foodtreat
+int currentLevel = 1;                          // current and starting level
+const int MAX_LEVEL = 1;                       // Maximum number of levels
+const int HISTORY_LENGTH = 50;                 // Number of previous interactions to look at for
+                                               // performance
+const int ENOUGH_SUCCESSES = 30;               // if num successes >= ENOUGH_SUCCESSES level-up
+const unsigned long FOODTREAT_DURATION = 5000; // (ms) how long to present
+                                               // foodtreat
 const int FLASHING = 0;
 const int FLASHING_DUTY_CYCLE = 99;
 const unsigned long TIMEOUT_MS = 60000; // (ms) how long to wait until restarting
-                                       // the interaction
-const int NUM_PADS = 1; // Choose number of pads to light up at once (1, 2 or 3)
+                                        // the interaction
+const int NUM_PADS = 1;                 // Choose number of pads to light up at once (1, 2 or 3)
 
 /**
  * Global variables and constants
  * ------------------------------
  */
 const unsigned long SOUND_FOODTREAT_DELAY = 1200; // (ms) delay for reward sound
-const unsigned long SOUND_TOUCHPAD_DELAY = 300; // (ms) delay for touchpad sound
+const unsigned long SOUND_TOUCHPAD_DELAY = 300;   // (ms) delay for touchpad sound
 
 bool performance[HISTORY_LENGTH] = {0}; // store the progress in this challenge
-unsigned char perfPos = 0;   // to keep our position in the performance array
-unsigned char perfDepth = 0; // size of the number of perf numbers to consider
+unsigned char perfPos = 0;              // to keep our position in the performance array
+unsigned char perfDepth = 0;            // size of the number of perf numbers to consider
 
 // Use primary serial over USB interface for logging output (9600)
 // Choose logging level here (ERROR, WARN, INFO)
-SerialLogHandler logHandler(LOG_LEVEL_INFO, { // Logging level for all messages
-    { "app.hackerpet", LOG_LEVEL_ERROR }, // Logging level for library messages
-    { "app", LOG_LEVEL_INFO } // Logging level for application messages
-});
+SerialLogHandler logHandler(LOG_LEVEL_INFO, {
+                                                // Logging level for all messages
+                                                {"app.hackerpet", LOG_LEVEL_ERROR}, // Logging level for library messages
+                                                {"app", LOG_LEVEL_INFO}             // Logging level for application messages
+                                            });
 
 // initialize hub interface (from hackerpet)
 HubInterface hub;
@@ -80,7 +81,8 @@ SYSTEM_THREAD(ENABLED);
  */
 
 /// return the number of successful interactions in performance history for current level
-unsigned int countSuccesses() {
+unsigned int countSuccesses()
+{
   unsigned int total = 0;
   for (unsigned char i = 0; i <= perfDepth - 1; i++)
     if (performance[i] == 1)
@@ -89,7 +91,8 @@ unsigned int countSuccesses() {
 }
 
 /// return the number of misses in performance history for current level
-unsigned int countMisses() {
+unsigned int countMisses()
+{
   unsigned int total = 0;
   for (unsigned char i = 0; i <= perfDepth - 1; i++)
     if (performance[i] == 0)
@@ -98,7 +101,8 @@ unsigned int countMisses() {
 }
 
 /// reset performance history to 0
-void resetPerformanceHistory() {
+void resetPerformanceHistory()
+{
   for (unsigned char i = 0; i < HISTORY_LENGTH; i++)
     performance[i] = 0;
   perfPos = 0;
@@ -106,13 +110,15 @@ void resetPerformanceHistory() {
 }
 
 /// add an interaction result to the performance history
-void addResultToPerformanceHistory(bool entry) {
+void addResultToPerformanceHistory(bool entry)
+{
   // Log.info("Adding %u", entry);
   performance[perfPos] = entry;
   perfPos++;
   if (perfDepth < HISTORY_LENGTH)
     perfDepth++;
-  if (perfPos > (HISTORY_LENGTH - 1)) { // make our performance array circular
+  if (perfPos > (HISTORY_LENGTH - 1))
+  { // make our performance array circular
     perfPos = 0;
   }
   // Log.info("perfPos %u, perfDepth %u", perfPos, perfDepth);
@@ -121,9 +127,11 @@ void addResultToPerformanceHistory(bool entry) {
 }
 
 /// print the performance history for debugging
-void printPerformanceArray() {
+void printPerformanceArray()
+{
   Serial.printf("performance: {");
-  for (unsigned char i = 0; i < perfDepth; i++) {
+  for (unsigned char i = 0; i < perfDepth; i++)
+  {
     Serial.printf("%u", performance[i]);
     if ((i + 1) == perfPos)
       Serial.printf("|");
@@ -134,7 +142,8 @@ void printPerformanceArray() {
 /// converts a bitfield of pressed touchpads to letters
 /// multiple consecutive touches are possible and will be reported L -> M - > R
 /// @returns String
-String convertBitfieldToLetter(unsigned char pad){
+String convertBitfieldToLetter(unsigned char pad)
+{
   String letters = "";
   if (pad & hub.BUTTON_LEFT)
     letters += 'L';
@@ -146,14 +155,15 @@ String convertBitfieldToLetter(unsigned char pad){
 }
 
 /// The actual LearningTheLights challenge. This function needs to be called in a loop.
-bool playLearningTheLights() {
+bool playLearningTheLights()
+{
   yield_begin();
 
   static unsigned long timestampBefore, activityDuration, timestampTouchpad = 0;
   static int foodtreatState = 99;
   static unsigned long gameStartTime = 0; // store the interaction start time for report
-  static int yellow = 60; // touchpad color, is randomized
-  static int blue = 60; // touchpad color, is randomized
+  static int yellow = 60;                 // touchpad color, is randomized
+  static int blue = 60;                   // touchpad color, is randomized
   static unsigned char target, pressed = 0;
   static unsigned char retryTarget = 0; // should not be re-initialized
   static bool accurate = false;
@@ -164,12 +174,12 @@ bool playLearningTheLights() {
   // Static variables and constants are only initialized once, and need to be re-initialized
   // on subsequent calls
   timestampBefore = 0;
-  activityDuration =0;
+  activityDuration = 0;
   timestampTouchpad = 0;
   foodtreatState = 99;
   gameStartTime = 0; // store the interaction start time for report
-  yellow = 60; // touchpad color, is randomized
-  blue = 60; // touchpad color, is randomized
+  yellow = 60;       // touchpad color, is randomized
+  blue = 60;         // touchpad color, is randomized
   target, pressed = 0;
   accurate = false;
   timeout = false;
@@ -200,13 +210,16 @@ bool playLearningTheLights() {
   timestampBefore = millis();
 
   yellow = random(20, 90); // pick a yellow for interaction
-  blue = random(20, 90);    // pick a blue for interaction
+  blue = random(20, 90);   // pick a blue for interaction
 
-  if (retryTarget != 0) {
+  if (retryTarget != 0)
+  {
     Log.info("We're doing a retry interaction");
     target = retryTarget;
     hub.SetLights(target, yellow, blue, FLASHING, FLASHING_DUTY_CYCLE);
-  } else {
+  }
+  else
+  {
     // choose some target lights, and store which targets were randomly chosen
     target = hub.SetRandomButtonLights(NUM_PADS, yellow, blue, FLASHING,
                                        FLASHING_DUTY_CYCLE);
@@ -215,7 +228,8 @@ bool playLearningTheLights() {
   // progress to next state
   timestampTouchpad = millis();
 
-  do {
+  do
+  {
     // detect any touchpads currently pressed
     pressed = hub.AnyButtonPressed();
     // use yields statements any time the hub is pausing or waiting
@@ -230,11 +244,14 @@ bool playLearningTheLights() {
   hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off lights
 
   // Check touchpads and accuracy
-  if (pressed == 0) {
+  if (pressed == 0)
+  {
     Log.info("No touchpad pressed, we have a timeout");
     timeout = true;
     accurate = false;
-  } else {
+  }
+  else
+  {
     // Log.info("Button pressed");
     timeout = false;
     // will be zero if and only if the wrong touchpad was touched
@@ -244,7 +261,8 @@ bool playLearningTheLights() {
   foodtreatWasEaten = false;
 
   // Check result and consequences
-  if (accurate) {
+  if (accurate)
+  {
     Log.info("Correct touchpad pressed, dispensing foodtreat");
     // give the Hub a moment to finish playing the touchpad sound
     yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
@@ -253,7 +271,8 @@ bool playLearningTheLights() {
     yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
     // if successful interaction, present foodtreat using PresentAndCheckFoodtreat
     // state machine
-    do {
+    do
+    {
       foodtreatState =
           hub.PresentAndCheckFoodtreat(FOODTREAT_DURATION); // time pres (ms)
       yield(false);
@@ -261,14 +280,19 @@ bool playLearningTheLights() {
              foodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
 
     // Check if foodtreat was eaten
-    if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN) {
+    if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
+    {
       Log.info("Foodtreat was eaten");
       foodtreatWasEaten = true;
-    } else {
+    }
+    else
+    {
       Log.info("Foodtreat was not eaten");
       foodtreatWasEaten = false;
     }
-  } else {
+  }
+  else
+  {
     if (!timeout) // don't play any audio if there's a timeout (no response -> no
                   // consequence)
     {
@@ -285,18 +309,24 @@ bool playLearningTheLights() {
 
   // Update performance, even on timeout
   // Check if we're ready for next challenge
-  if (currentLevel == MAX_LEVEL) {
+  if (currentLevel == MAX_LEVEL)
+  {
     addResultToPerformanceHistory(accurate);
-    if (countSuccesses() >= ENOUGH_SUCCESSES) {
+    if (countSuccesses() >= ENOUGH_SUCCESSES)
+    {
       Log.info("At MAX level! %u", currentLevel);
       challengeComplete = true;
       resetPerformanceHistory();
     }
-  } else {
+  }
+  else
+  {
     // Increase level if foodtreat eaten and good performance in this level
     addResultToPerformanceHistory(accurate);
-    if (countSuccesses() >= ENOUGH_SUCCESSES) {
-      if (currentLevel < MAX_LEVEL) {
+    if (countSuccesses() >= ENOUGH_SUCCESSES)
+    {
+      if (currentLevel < MAX_LEVEL)
+      {
         currentLevel++;
         Log.info("Leveling UP %u", currentLevel);
         resetPerformanceHistory();
@@ -304,7 +334,8 @@ bool playLearningTheLights() {
     }
   }
 
-  if (!timeout) {
+  if (!timeout)
+  {
     // Send report
     Log.info("Sending report");
 
@@ -313,26 +344,32 @@ bool playLearningTheLights() {
     extra += "\",\"pressed\":\"";
     extra += convertBitfieldToLetter(pressed);
     extra += String::format("\",\"retryGame\":\"%c\"", retryTarget ? '1' : '0');
-    if (challengeComplete) {extra += ",\"challengeComplete\":1";}
+    if (challengeComplete)
+    {
+      extra += ",\"challengeComplete\":1";
+    }
     extra += "}";
-    
+
     hub.Report(Time.format(gameStartTime,
                            TIME_FORMAT_ISO8601_FULL), // play_start_time
                PlayerName,                            // player
-               currentLevel,                         // level
+               currentLevel,                          // level
                String(accurate),                      // result
-               activityDuration,                     // duration
+               activityDuration,                      // duration
                accurate,                              // foodtreat_presented
-               foodtreatWasEaten,                   // foodtreatWasEaten
+               foodtreatWasEaten,                     // foodtreatWasEaten
                extra                                  // extra field
     );
   }
 
   // Check if we need to do, or reset a retry interaction
-  if (accurate) {
+  if (accurate)
+  {
     // Reset retry interaction
     retryTarget = 0;
-  } else if (!timeout) {
+  }
+  else if (!timeout)
+  {
     // Set retry interaction
     retryTarget = target;
   }
@@ -351,7 +388,8 @@ bool playLearningTheLights() {
  * Setup function
  * --------------
  */
-void setup() {
+void setup()
+{
   // Initializes the hub and passes the current filename as ID for reporting
   hub.Initialize(__FILE__);
 }
@@ -360,7 +398,8 @@ void setup() {
  * Main loop function
  * ------------------
  */
-void loop() {
+void loop()
+{
   bool gameIsComplete = false;
 
   // Advance the device layer state machine, but with 20 ms max time
@@ -370,7 +409,8 @@ void loop() {
   // Play 1 interaction of the Learning The Lights challenge
   gameIsComplete = playLearningTheLights(); // Will return true if level is done
 
-  if (gameIsComplete) {
+  if (gameIsComplete)
+  {
     // Interaction end
     return;
   }

@@ -45,32 +45,32 @@ const char PlayerName[] = "Pet, Clever";
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-int currentLevel = 1;  // starting level
+int currentLevel = 1; // starting level
 const int MAX_LEVEL = 3;
 const unsigned long CHALLENGE_TIMER_DURATIONS[MAX_LEVEL] = {600000,  // level 1: 10 mins
-                                                           600000,  // level 2: 10 mins
-                                                           300000}; // level 3: 5 mins
-const int HISTORY_LENGTH = 100; // Number of previous interactions to look at for
-                               // performance This challenge uses a timer, so doesn't
-                               // care about history length.
-const int ENOUGH_SUCCESSES = 10;     // if pos interactions >= ENOUGH_SUCCESSES level-up
-const int TOO_MANY_MISSES = 99;      // if neg interactions >= TOO_MANY_MISSES level-down
-const int YELLOW = 60;              // touchpad color
-const int BLUE = 60;                // touchpad color
-const int FLASHING = 0;             // touchpad 0: no FLASHING
-const int FLASHING_DUTY_CYCLE = 99; // ignored since no FLASHING
+                                                            600000,  // level 2: 10 mins
+                                                            300000}; // level 3: 5 mins
+const int HISTORY_LENGTH = 100;                                      // Number of previous interactions to look at for
+                                                                     // performance This challenge uses a timer, so doesn't
+                                                                     // care about history length.
+const int ENOUGH_SUCCESSES = 10;                                     // if pos interactions >= ENOUGH_SUCCESSES level-up
+const int TOO_MANY_MISSES = 99;                                      // if neg interactions >= TOO_MANY_MISSES level-down
+const int YELLOW = 60;                                               // touchpad color
+const int BLUE = 60;                                                 // touchpad color
+const int FLASHING = 0;                                              // touchpad 0: no FLASHING
+const int FLASHING_DUTY_CYCLE = 99;                                  // ignored since no FLASHING
 
 /**
  * Global variables and constants
  * ------------------------------
  */
 const unsigned long SOUND_FOODTREAT_DELAY = 1200; // (ms) delay for reward sound
-const unsigned long SOUND_TOUCHPAD_DELAY = 300; // (ms) delay for touchpad sound
+const unsigned long SOUND_TOUCHPAD_DELAY = 300;   // (ms) delay for touchpad sound
 
 bool performance[HISTORY_LENGTH] = {0}; // store the progress in this challenge
-unsigned char perfPos = 0;   // to keep our position in the performance array
-unsigned char perfDepth = 0; // to keep the size of the number of perf numbers
-                              // to consider
+unsigned char perfPos = 0;              // to keep our position in the performance array
+unsigned char perfDepth = 0;            // to keep the size of the number of perf numbers
+                                        // to consider
 // timer values to check if challenge should continue
 unsigned long challenge_timer_before, challenge_timer_length = 0;
 bool reset_challenge_timer = true; // bool to check if timer time should be
@@ -78,10 +78,11 @@ bool reset_challenge_timer = true; // bool to check if timer time should be
 
 // Use primary serial over USB interface for logging output (9600)
 // Choose logging level here (ERROR, WARN, INFO)
-SerialLogHandler logHandler(LOG_LEVEL_INFO, { // Logging level for all messages
-    { "app.hackerpet", LOG_LEVEL_ERROR }, // Logging level for library messages
-    { "app", LOG_LEVEL_INFO } // Logging level for application messages
-});
+SerialLogHandler logHandler(LOG_LEVEL_INFO, {
+                                                // Logging level for all messages
+                                                {"app.hackerpet", LOG_LEVEL_ERROR}, // Logging level for library messages
+                                                {"app", LOG_LEVEL_INFO}             // Logging level for application messages
+                                            });
 
 // access to hub functionality (lights, foodtreats, etc.)
 HubInterface hub;
@@ -95,7 +96,8 @@ SYSTEM_THREAD(ENABLED);
  */
 
 //// return the number of positive interactions in performance history for current level
-unsigned int countSuccesses() {
+unsigned int countSuccesses()
+{
   unsigned int total = 0;
   for (unsigned char i = 0; i <= perfDepth - 1; i++)
     if (performance[i] == 1)
@@ -104,7 +106,8 @@ unsigned int countSuccesses() {
 }
 
 /// return the number of negative interactions in performance history for current level
-unsigned int countMisses() {
+unsigned int countMisses()
+{
   unsigned int total = 0;
   for (unsigned char i = 0; i <= perfDepth - 1; i++)
     if (performance[i] == 0)
@@ -113,7 +116,8 @@ unsigned int countMisses() {
 }
 
 /// reset performance history to 0
-void resetPerformanceHistory() {
+void resetPerformanceHistory()
+{
   for (unsigned char i = 0; i < HISTORY_LENGTH; i++)
     performance[i] = 0;
   perfPos = 0;
@@ -121,13 +125,15 @@ void resetPerformanceHistory() {
 }
 
 /// add an interaction result to the performance history
-void addResultToPerformanceHistory(bool entry) {
+void addResultToPerformanceHistory(bool entry)
+{
   // Log.info("Adding %u", entry);
   performance[perfPos] = entry;
   perfPos++;
   if (perfDepth < HISTORY_LENGTH)
     perfDepth++;
-  if (perfPos > (HISTORY_LENGTH - 1)) { // make our performance array circular
+  if (perfPos > (HISTORY_LENGTH - 1))
+  { // make our performance array circular
     perfPos = 0;
   }
   // Log.info("perfPos %u, perfDepth %u", perfPos, perfDepth);
@@ -136,7 +142,8 @@ void addResultToPerformanceHistory(bool entry) {
 }
 
 /// print the performance history for debugging
-void printPerformanceArray() {
+void printPerformanceArray()
+{
   Serial.printf("performance: ");
   for (unsigned char i = 0; i < HISTORY_LENGTH; i++)
     Serial.printf("%u", performance[i]);
@@ -144,7 +151,8 @@ void printPerformanceArray() {
 }
 
 /// The actual EngagingConsistently challenge. This function needs to be called in a loop.
-bool playEngagingConsistently() {
+bool playEngagingConsistently()
+{
   yield_begin();
 
   static unsigned long gameStartTime, timestampBefore, reactionTime = 0;
@@ -166,7 +174,7 @@ bool playEngagingConsistently() {
   timeout = false;
   tray_duration = 6000;
   timeout_duration = 300000; // 5 mins
-  pressed = 0;     // to hold the pressed touchpad
+  pressed = 0;               // to hold the pressed touchpad
 
   Log.info("-------------------------------------------");
   // Log.info("Starting new \"Engaging Consistently\" challenge");
@@ -196,7 +204,8 @@ bool playEngagingConsistently() {
   hub.SetRandomButtonLights(3, YELLOW, BLUE, FLASHING, FLASHING_DUTY_CYCLE);
 
   // Wait here until a touchpad is pressed or until we have a timeout
-  do {
+  do
+  {
     pressed = hub.AnyButtonPressed();
     yield(false);
   } while ((pressed != hub.BUTTON_LEFT && pressed != hub.BUTTON_MIDDLE &&
@@ -210,11 +219,14 @@ bool playEngagingConsistently() {
   hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0);
 
   // Check result
-  if (pressed == 0) {
+  if (pressed == 0)
+  {
     Log.info("No touchpad pressed, we have a timeout");
     timeout = true;
     foodtreatWasEaten = false;
-  } else {
+  }
+  else
+  {
     Log.info("Button pressed, dispensing foodtreat");
     timeout = false;
 
@@ -226,35 +238,45 @@ bool playEngagingConsistently() {
     yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
 
     // Dispense a foodtreat and wait until the tray is closed again
-    do {
+    do
+    {
       foodtreatState = hub.PresentAndCheckFoodtreat(tray_duration);
       yield(false);
     } while (foodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
              foodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
 
     // Check if foodtreat was eaten
-    if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN) {
+    if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
+    {
       Log.info("Foodtreat was eaten");
       foodtreatWasEaten = true;
-    } else {
+    }
+    else
+    {
       Log.info("Foodtreat was not eaten");
       foodtreatWasEaten = false;
     }
   }
 
   // Check if we're ready for next challenge
-  if (currentLevel == MAX_LEVEL) {
+  if (currentLevel == MAX_LEVEL)
+  {
     addResultToPerformanceHistory(foodtreatWasEaten);
-    if (countSuccesses() >= ENOUGH_SUCCESSES) {
+    if (countSuccesses() >= ENOUGH_SUCCESSES)
+    {
       Log.info("At MAX level! %u", currentLevel);
       challengeComplete = true;
       resetPerformanceHistory();
     }
-  } else {
+  }
+  else
+  {
     // Increase level if foodtreat eaten and good performance in this level
     addResultToPerformanceHistory(foodtreatWasEaten);
-    if (countSuccesses() >= ENOUGH_SUCCESSES) {
-      if (currentLevel < MAX_LEVEL) {
+    if (countSuccesses() >= ENOUGH_SUCCESSES)
+    {
+      if (currentLevel < MAX_LEVEL)
+      {
         currentLevel++;
         Log.info("Leveling UP %u", currentLevel);
         resetPerformanceHistory();
@@ -264,8 +286,10 @@ bool playEngagingConsistently() {
 
   // Decrease level if bad performance in this level
   // BAD_PERFORMACE is really high, so will never come here
-  if (countMisses() >= TOO_MANY_MISSES) {
-    if (currentLevel > 1) {
+  if (countMisses() >= TOO_MANY_MISSES)
+  {
+    if (currentLevel > 1)
+    {
       currentLevel--;
       Log.info("Leveling DOWN %u", currentLevel);
       reset_challenge_timer = true;
@@ -276,7 +300,10 @@ bool playEngagingConsistently() {
   Log.info("Sending report");
   String extra = String::format(
       "{\"pos_tries\":%u,\"neg_tries\":%u", countSuccesses(), countMisses());
-  if (challengeComplete) {extra += ",\"challengeComplete\":1";}
+  if (challengeComplete)
+  {
+    extra += ",\"challengeComplete\":1";
+  }
   extra += "}";
 
   hub.Report(
@@ -284,10 +311,10 @@ bool playEngagingConsistently() {
       PlayerName,                                           // player
       currentLevel,                                         // level //TODO is this the correct level?
       String(foodtreatWasEaten),                            // result
-      reactionTime, // duration -> linked to level and includes tray movement
-      1,             // foodtreat_presented
-      foodtreatWasEaten, // foodtreatWasEaten
-      extra                // extra field
+      reactionTime,                                         // duration -> linked to level and includes tray movement
+      1,                                                    // foodtreat_presented
+      foodtreatWasEaten,                                    // foodtreatWasEaten
+      extra                                                 // extra field
   );
 
   // printPerformanceArray();
@@ -301,7 +328,8 @@ bool playEngagingConsistently() {
  * Setup function
  * --------------
  */
-void setup() {
+void setup()
+{
   // Initializes the hub and passes the current filename as ID for reporting
   hub.Initialize(__FILE__);
 }
@@ -310,7 +338,8 @@ void setup() {
  * Main loop function
  * ------------------
  */
-void loop() {
+void loop()
+{
   bool gameIsComplete = false;
 
   // Advance the device layer state machine, but with 20 ms max time
@@ -318,7 +347,8 @@ void loop() {
   hub.Run(20);
 
   // if the challenge timer expired we need to reset it
-  if (reset_challenge_timer) {
+  if (reset_challenge_timer)
+  {
     // Log.info("Timer reset");
     resetPerformanceHistory();
     challenge_timer_before = millis();
@@ -327,16 +357,20 @@ void loop() {
   }
 
   // Keep playing interactions as long as timer didn't expire
-  if (millis() <= (challenge_timer_before + challenge_timer_length)) {
+  if (millis() <= (challenge_timer_before + challenge_timer_length))
+  {
     // Play 1 level of the EngagingConsistently challenge
     // Will return true if level is done
     gameIsComplete = playEngagingConsistently();
-  } else {
+  }
+  else
+  {
     // Log.info("Timer expired");
     reset_challenge_timer = true;
   }
 
-  if(gameIsComplete){
+  if (gameIsComplete)
+  {
     return;
   }
 }

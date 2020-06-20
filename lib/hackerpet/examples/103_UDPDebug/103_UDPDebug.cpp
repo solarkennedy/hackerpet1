@@ -28,16 +28,15 @@ HubInterface hub;
 // Use the IP address and port where the receiver is listening
 PapertrailLogHandler papertrailHandler("192.168.1.191", 4888, "UDPDebug_Demo");
 
-
 // to avoid quirks define setup() nearly last, and right before loop()
 void setup()
 {
-    Serial.begin(9600);  // for debug text output
+  Serial.begin(9600); // for debug text output
 
-    // Initializes the hub and passes the current filename as ID for reporting
-    hub.Initialize(__FILE__);
+  // Initializes the hub and passes the current filename as ID for reporting
+  hub.Initialize(__FILE__);
 
-    last_timestamp = millis();
+  last_timestamp = millis();
 }
 
 // run-loop function required for Particle
@@ -47,9 +46,9 @@ void loop()
   // spent per loop cycle
   hub.Run(20);
 
-  if (millis() - last_timestamp > 1000) {
+  if (millis() - last_timestamp > 1000)
+  {
     Log.info("Elapsed:  %d\n", millis() - last_timestamp);
     last_timestamp = millis();
-    }
-
+  }
 }

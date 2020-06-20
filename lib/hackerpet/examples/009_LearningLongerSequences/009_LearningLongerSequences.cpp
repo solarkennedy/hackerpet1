@@ -46,18 +46,18 @@ const char PlayerName[] = "Pet, Clever";
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-const int HISTORY_LENGTH=      15;   // Number of past interactions to look at for performance
-const int ENOUGH_SUCCESSES=    12;   // if successes >= ENOUGH_SUCCESSES level-up
-const int TOO_MANY_MISSES=     12;   // if num misses >= TOO_MANY_MISSES level-down
+const int HISTORY_LENGTH = 15;   // Number of past interactions to look at for performance
+const int ENOUGH_SUCCESSES = 12; // if successes >= ENOUGH_SUCCESSES level-up
+const int TOO_MANY_MISSES = 12;  // if num misses >= TOO_MANY_MISSES level-down
 const int LIVES_START_STATE = 3; // total number of lives per interaction
-int sequenceLength = 3; // start sequence length
+int sequenceLength = 3;          // start sequence length
 const int SEQUENCE_LENGTHMax = 9;
 const int TARGET_INTENSITY = 75;
 const int NEXT_TARGET_INTENSITY = 10;
 const int SLEW = 90;
-const unsigned long FOODTREAT_DURATION = 6000; // (ms) how long to present foodtreat
-const unsigned long TIMEOUT_STIMULUS_MS = 300000; // (ms) how long to wait until restarting the
-                                                  // interaction
+const unsigned long FOODTREAT_DURATION = 6000;      // (ms) how long to present foodtreat
+const unsigned long TIMEOUT_STIMULUS_MS = 300000;   // (ms) how long to wait until restarting the
+                                                    // interaction
 const unsigned long TIMEOUT_INTERACTIONS_MS = 5000; // (ms) how long to wait until restarting the
                                                     // interaction
 const unsigned long INTER_GAME_DELAY = 10000;
@@ -67,18 +67,19 @@ const unsigned long INTER_GAME_DELAY = 10000;
  * ------------------------------
  */
 const unsigned long SOUND_FOODTREAT_DELAY = 1200; // (ms) delay for reward sound
-const unsigned long SOUND_TOUCHPAD_DELAY = 300; // (ms) delay for touchpad sound
+const unsigned long SOUND_TOUCHPAD_DELAY = 300;   // (ms) delay for touchpad sound
 
 bool performance[HISTORY_LENGTH] = {0}; // store the progress in this challenge
-unsigned char perfPos = 0; // to keep our position in the performance array
-unsigned char perfDepth = 0; // to keep the size of the number of perf numbers to consider
+unsigned char perfPos = 0;              // to keep our position in the performance array
+unsigned char perfDepth = 0;            // to keep the size of the number of perf numbers to consider
 
 // Use primary serial over USB interface for logging output (9600)
 // Choose logging level here (ERROR, WARN, INFO)
-SerialLogHandler logHandler(LOG_LEVEL_INFO, { // Logging level for all messages
-    { "app.hackerpet", LOG_LEVEL_ERROR }, // Logging level for library messages
-    { "app", LOG_LEVEL_INFO } // Logging level for application messages
-});
+SerialLogHandler logHandler(LOG_LEVEL_INFO, {
+                                                // Logging level for all messages
+                                                {"app.hackerpet", LOG_LEVEL_ERROR}, // Logging level for library messages
+                                                {"app", LOG_LEVEL_INFO}             // Logging level for application messages
+                                            });
 
 // access to hub functionality (lights, foodtreats, etc.)
 HubInterface hub;
@@ -92,53 +93,59 @@ SYSTEM_THREAD(ENABLED);
  */
 
 /// return the number of successes in performance history for current level
-unsigned int countSuccesses(){
+unsigned int countSuccesses()
+{
     unsigned int total = 0;
-    for (unsigned char i = 0; i <= perfDepth-1 ; i++)
-        if(performance[i]==1)
+    for (unsigned char i = 0; i <= perfDepth - 1; i++)
+        if (performance[i] == 1)
             total++;
     return total;
 }
 
 /// return the number of misss in performance history for current level
-unsigned int countMisses(){
+unsigned int countMisses()
+{
     unsigned int total = 0;
-    for (unsigned char i = 0; i <= perfDepth-1 ; i++)
-        if(performance[i]==0)
+    for (unsigned char i = 0; i <= perfDepth - 1; i++)
+        if (performance[i] == 0)
             total++;
     return total;
 }
 
 /// reset performance history to 0
-void resetPerformanceHistory(){
-    for (unsigned char i = 0; i < HISTORY_LENGTH ; i++)
+void resetPerformanceHistory()
+{
+    for (unsigned char i = 0; i < HISTORY_LENGTH; i++)
         performance[i] = 0;
     perfPos = 0;
     perfDepth = 0;
 }
 
 /// add a interaction result to the performance history
-void addResultToPerformanceHistory(bool entry){
-        // Log.info("Adding %u", entry);
+void addResultToPerformanceHistory(bool entry)
+{
+    // Log.info("Adding %u", entry);
     performance[perfPos] = entry;
     perfPos++;
     if (perfDepth < HISTORY_LENGTH)
         perfDepth++;
-    if (perfPos > (HISTORY_LENGTH - 1)){ // make our performance array circular
+    if (perfPos > (HISTORY_LENGTH - 1))
+    { // make our performance array circular
         perfPos = 0;
     }
     // Log.info("perfPos %u, perfDepth %u", perfPos, perfDepth);
     Log.info("New successes: %u, misss: %u", countSuccesses(),
              countMisses());
-
 }
 
 /// print the performance history for debugging
-void printPerformanceArray(){
+void printPerformanceArray()
+{
     Serial.printf("performance: {");
-    for (unsigned char i = 0; i < perfDepth ; i++){
-        Serial.printf("%u",performance[i]);
-        if ((i+1) == perfPos)
+    for (unsigned char i = 0; i < perfDepth; i++)
+    {
+        Serial.printf("%u", performance[i]);
+        if ((i + 1) == perfPos)
             Serial.printf("|");
     }
     Serial.printf("}\n");
@@ -146,15 +153,16 @@ void printPerformanceArray(){
 /// converts a bitfield of pressed touchpads to letters
 /// multiple consecutive touches are possible and will be reported L -> M - > R
 /// @returns String
-String convertBitfieldToLetter(unsigned char pad){
-  String letters = "";
-  if (pad & hub.BUTTON_LEFT)
-    letters += 'L';
-  if (pad & hub.BUTTON_MIDDLE)
-    letters += 'M';
-  if (pad & hub.BUTTON_RIGHT)
-    letters += 'R';
-  return letters;
+String convertBitfieldToLetter(unsigned char pad)
+{
+    String letters = "";
+    if (pad & hub.BUTTON_LEFT)
+        letters += 'L';
+    if (pad & hub.BUTTON_MIDDLE)
+        letters += 'M';
+    if (pad & hub.BUTTON_RIGHT)
+        letters += 'R';
+    return letters;
 }
 
 /// converts requested touchpad bitfield and pressed touchpad bitfield to a
@@ -163,48 +171,54 @@ String convertBitfieldToLetter(unsigned char pad){
 /// returned, if wrong only the wrong pad will be returned, if multiple wrong
 /// pads pressed, only one wrong pad will be returned in order L -> M -> R
 /// @returns String
-String convertBitfieldToSingleLetter(unsigned char targetPad, unsigned char pad){
-  if ((targetPad & (targetPad-1)) != 0) // error targetPad has multiple pads set
-    return "X";
+String convertBitfieldToSingleLetter(unsigned char targetPad, unsigned char pad)
+{
+    if ((targetPad & (targetPad - 1)) != 0) // error targetPad has multiple pads set
+        return "X";
 
-  String letter = "";
-  if (targetPad == pad){ // did we get it right?
-    letter += convertBitfieldToLetter(targetPad); // report right pad
-  }
-  else { // we have a wrong pad touched or multiple pads touched (of which one is wrong)
-    unsigned char maskedPressed = ~targetPad & pad; // mask out the correct pad
-    // check if multiple pads touched (except for correct one)
-    if ((maskedPressed & (maskedPressed-1)) != 0)
-    {
-      // multiple wrong pads touched
-      //just pick one to report, L -> M -> R
-      if (maskedPressed & hub.BUTTON_LEFT)
-        letter += 'L';
-      else if (maskedPressed & hub.BUTTON_MIDDLE)
-        letter += 'M';
-      else if (maskedPressed & hub.BUTTON_RIGHT)
-        letter += 'R';
-    } else {
-      //only one wrong pad touched
-      letter += convertBitfieldToLetter(maskedPressed);
+    String letter = "";
+    if (targetPad == pad)
+    {                                                 // did we get it right?
+        letter += convertBitfieldToLetter(targetPad); // report right pad
     }
-  }
-  return letter;
+    else
+    {                                                   // we have a wrong pad touched or multiple pads touched (of which one is wrong)
+        unsigned char maskedPressed = ~targetPad & pad; // mask out the correct pad
+        // check if multiple pads touched (except for correct one)
+        if ((maskedPressed & (maskedPressed - 1)) != 0)
+        {
+            // multiple wrong pads touched
+            //just pick one to report, L -> M -> R
+            if (maskedPressed & hub.BUTTON_LEFT)
+                letter += 'L';
+            else if (maskedPressed & hub.BUTTON_MIDDLE)
+                letter += 'M';
+            else if (maskedPressed & hub.BUTTON_RIGHT)
+                letter += 'R';
+        }
+        else
+        {
+            //only one wrong pad touched
+            letter += convertBitfieldToLetter(maskedPressed);
+        }
+    }
+    return letter;
 }
 
 /// The actual LearningLongerSequences function. This function needs to be called in a loop.
-bool playLearningLongerSequences(){
+bool playLearningLongerSequences()
+{
     yield_begin();
 
     static unsigned long timestampBefore, timestampTouchpad, gameStartTime, activityDuration = 0;
     static unsigned char foodtreatState = 99;
     static int lives = LIVES_START_STATE;
-    static unsigned char touchpads[3]={hub.BUTTON_LEFT,
-                                     hub.BUTTON_MIDDLE,
-                                     hub.BUTTON_RIGHT};
+    static unsigned char touchpads[3] = {hub.BUTTON_LEFT,
+                                         hub.BUTTON_MIDDLE,
+                                         hub.BUTTON_RIGHT};
     static unsigned char sequence_pos = 0;
-    static unsigned char touchpad_sequence[SEQUENCE_LENGTHMax]={};
-    static unsigned char pressed[SEQUENCE_LENGTHMax+1] = {};
+    static unsigned char touchpad_sequence[SEQUENCE_LENGTHMax] = {};
+    static unsigned char pressed[SEQUENCE_LENGTHMax + 1] = {};
     static bool accurate = false;
     static bool timeout = false;
     static bool foodtreatWasEaten = false; // store if foodtreat was eaten in last interaction
@@ -217,13 +231,13 @@ bool playLearningLongerSequences(){
     gameStartTime = 0;
     activityDuration = 0;
     foodtreatState = 99;
-    touchpads[0]=hub.BUTTON_LEFT;
-    touchpads[1]=hub.BUTTON_MIDDLE;
-    touchpads[2]=hub.BUTTON_RIGHT;
+    touchpads[0] = hub.BUTTON_LEFT;
+    touchpads[1] = hub.BUTTON_MIDDLE;
+    touchpads[2] = hub.BUTTON_RIGHT;
     sequence_pos = 0;
     // reset sequence, lives and pressed touchpads
-    fill(touchpad_sequence, touchpad_sequence+SEQUENCE_LENGTHMax, 0);
-    fill(pressed, pressed+SEQUENCE_LENGTHMax+1, 0);
+    fill(touchpad_sequence, touchpad_sequence + SEQUENCE_LENGTHMax, 0);
+    fill(pressed, pressed + SEQUENCE_LENGTHMax + 1, 0);
     lives = LIVES_START_STATE;
     accurate = false;
     timeout = false;
@@ -232,16 +246,14 @@ bool playLearningLongerSequences(){
     Log.info("-------------------------------------------");
     // Log.info("Starting new \"Learning Longer Sequences\" challenge");
     // Log.info("Current length: %u, successes: %u, num misses: %u",
-        // sequenceLength, countSuccesses(), countMisses());
+    // sequenceLength, countSuccesses(), countMisses());
 
     // before starting interaction, wait until:
     //  1. device layer is ready (in a good state)
     //  2. foodmachine is "idle", meaning it is not spinning or dispensing foodtreat
     //      and tray is retracted (see FOODMACHINE_... constants)
     //  3. no button is currently pressed
-    yield_wait_for((hub.IsReady()
-                    && hub.FoodmachineState() == hub.FOODMACHINE_IDLE
-                    && not hub.AnyButtonPressed()), false);
+    yield_wait_for((hub.IsReady() && hub.FoodmachineState() == hub.FOODMACHINE_IDLE && not hub.AnyButtonPressed()), false);
 
     // DI reset occurs if, for example, device  layer detects that touchpads need re-calibration
     hub.SetDIResetLock(true);
@@ -255,7 +267,7 @@ bool playLearningLongerSequences(){
         touchpad_sequence[i] = touchpads[0];
     }
 
-    hub.SetLights(hub.LIGHT_BTNS,TARGET_INTENSITY,TARGET_INTENSITY,SLEW);
+    hub.SetLights(hub.LIGHT_BTNS, TARGET_INTENSITY, TARGET_INTENSITY, SLEW);
 
     // progress to next state
     timestampTouchpad = millis();
@@ -266,10 +278,9 @@ bool playLearningLongerSequences(){
         pressed[0] = hub.AnyButtonPressed();
         // use yields statements any time the hub is pausing or waiting
         yield(false);
-    }
-    while (!(pressed[0] != 0) //0 if any touchpad is touched
-            //0 if timed out
-            && millis()  < timestampTouchpad + TIMEOUT_STIMULUS_MS);
+    } while (!(pressed[0] != 0) //0 if any touchpad is touched
+             //0 if timed out
+             && millis() < timestampTouchpad + TIMEOUT_STIMULUS_MS);
 
     hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off all touchpad lights
 
@@ -282,7 +293,9 @@ bool playLearningLongerSequences(){
         sequence_pos = 0;
         timeout = false;
         accurate = true;
-    } else {
+    }
+    else
+    {
         Log.info("No touchpad pressed, timeout");
         sequence_pos = sequenceLength; // skip the interactions
         accurate = false;
@@ -293,21 +306,22 @@ bool playLearningLongerSequences(){
     timestampBefore = millis();
 
     // Start main interactions loop
-    while (sequence_pos < sequenceLength) {
-        Log.info("Interaction %d. Target touchpad: %c%c%c", (sequence_pos+1),
-            (touchpad_sequence[sequence_pos]&hub.BUTTON_LEFT)?'1':'0',
-            (touchpad_sequence[sequence_pos]&hub.BUTTON_MIDDLE)?'1':'0',
-            (touchpad_sequence[sequence_pos]&hub.BUTTON_RIGHT)?'1':'0');
+    while (sequence_pos < sequenceLength)
+    {
+        Log.info("Interaction %d. Target touchpad: %c%c%c", (sequence_pos + 1),
+                 (touchpad_sequence[sequence_pos] & hub.BUTTON_LEFT) ? '1' : '0',
+                 (touchpad_sequence[sequence_pos] & hub.BUTTON_MIDDLE) ? '1' : '0',
+                 (touchpad_sequence[sequence_pos] & hub.BUTTON_RIGHT) ? '1' : '0');
 
         // wait until: no button is currently pressed
         yield_wait_for((!hub.AnyButtonPressed()), false);
         // TODO fix slobber
 
         // set next touchpad and this touchpad
-        if (sequence_pos < sequenceLength-1)
-          hub.SetLights(touchpad_sequence[sequence_pos + 1],
-                        NEXT_TARGET_INTENSITY, NEXT_TARGET_INTENSITY, SLEW);
-        hub.SetLights(touchpad_sequence[sequence_pos],TARGET_INTENSITY,TARGET_INTENSITY,SLEW);
+        if (sequence_pos < sequenceLength - 1)
+            hub.SetLights(touchpad_sequence[sequence_pos + 1],
+                          NEXT_TARGET_INTENSITY, NEXT_TARGET_INTENSITY, SLEW);
+        hub.SetLights(touchpad_sequence[sequence_pos], TARGET_INTENSITY, TARGET_INTENSITY, SLEW);
 
         // progress to next state
         timestampTouchpad = millis();
@@ -315,25 +329,29 @@ bool playLearningLongerSequences(){
         {
             // detect any buttons currently pressed
             // sequence_pos = 0 already stores stimulus button press
-            pressed[sequence_pos+1] = hub.AnyButtonPressed();
-            yield(false); // use yields statements any time the hub is pausing or waiting
-        }
-        while (!(pressed[sequence_pos+1] != 0) //0 if any touchpad is touched
-                && millis()  < timestampTouchpad + TIMEOUT_INTERACTIONS_MS); //0 if timed out
+            pressed[sequence_pos + 1] = hub.AnyButtonPressed();
+            yield(false);                                                    // use yields statements any time the hub is pausing or waiting
+        } while (!(pressed[sequence_pos + 1] != 0)                           //0 if any touchpad is touched
+                 && millis() < timestampTouchpad + TIMEOUT_INTERACTIONS_MS); //0 if timed out
 
-        if (pressed[sequence_pos+1] == 0) {
+        if (pressed[sequence_pos + 1] == 0)
+        {
             Log.info("No touchpad pressed, timeout");
             timeout = true;
             accurate = false;
             sequence_pos = sequenceLength;
-        } else if (pressed[sequence_pos+1] == touchpad_sequence[sequence_pos]) {
-             Log.info("Correct touchpad pressed");
+        }
+        else if (pressed[sequence_pos + 1] == touchpad_sequence[sequence_pos])
+        {
+            Log.info("Correct touchpad pressed");
             // turn off lights on last touchpad
-            hub.SetLights(touchpad_sequence[sequence_pos],0,0,0);
+            hub.SetLights(touchpad_sequence[sequence_pos], 0, 0, 0);
             sequence_pos++;
             accurate = true;
             timeout = false;
-        } else { // asuming wrong
+        }
+        else
+        { // asuming wrong
             Log.info("Wrong button pressed");
             timeout = false;
             lives--;
@@ -342,8 +360,10 @@ bool playLearningLongerSequences(){
                 Log.info("Lives depleated");
                 accurate = false;
                 sequence_pos = sequenceLength;
-            } else {
-                Log.info("Deducted life. Lives left: %d. Re-interaction",lives);
+            }
+            else
+            {
+                Log.info("Deducted life. Lives left: %d. Re-interaction", lives);
                 // lost life but not done
                 // give the Hub a moment to finish playing the touchpad sound
                 yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
@@ -351,7 +371,7 @@ bool playLearningLongerSequences(){
                 // give the Hub a moment to finish playing the sound
                 yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
                 //reset the touched pad
-                pressed[sequence_pos+1] = 0;
+                pressed[sequence_pos + 1] = 0;
             }
         }
     }
@@ -361,29 +381,37 @@ bool playLearningLongerSequences(){
 
     hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off all touchpad lights
 
-    if (accurate) {
+    if (accurate)
+    {
         Log.info("All interactions passed, dispensing foodtreat");
         // give the Hub a moment to finish playing the touchpad sound
         yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
         hub.PlayAudio(hub.AUDIO_POSITIVE, 60);
         // give the Hub a moment to finish playing the reward sound
         yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
-        do {
-            foodtreatState=hub.PresentAndCheckFoodtreat(FOODTREAT_DURATION);
+        do
+        {
+            foodtreatState = hub.PresentAndCheckFoodtreat(FOODTREAT_DURATION);
             yield(false);
-        } while (foodtreatState!=hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
-             foodtreatState!=hub.PACT_RESPONSE_FOODTREAT_TAKEN);
+        } while (foodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
+                 foodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
 
         // Check if foodtreat was eaten
-        if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN){
+        if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
+        {
             Log.info("Treat was eaten");
             foodtreatWasEaten = true;
-        } else {
+        }
+        else
+        {
             Log.info("Treat was not eaten");
             foodtreatWasEaten = false;
         }
-    } else {
-        if (!timeout) {
+    }
+    else
+    {
+        if (!timeout)
+        {
             // give the Hub a moment to finish playing the touchpad sound
             yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
             hub.PlayAudio(hub.AUDIO_NEGATIVE, 60);
@@ -401,19 +429,23 @@ bool playLearningLongerSequences(){
     }
 
     // keep track of performance
-    if (!timeout){
+    if (!timeout)
+    {
         addResultToPerformanceHistory(accurate);
     }
 
     // adjust sequence length according to performance
-    if (countSuccesses() >= ENOUGH_SUCCESSES) {
+    if (countSuccesses() >= ENOUGH_SUCCESSES)
+    {
         if (sequenceLength < SEQUENCE_LENGTHMax)
         {
             Log.info("Increasing sequence length! %u", sequenceLength);
             sequenceLength++;
         }
         resetPerformanceHistory();
-    } else if (countMisses() >= TOO_MANY_MISSES) {
+    }
+    else if (countMisses() >= TOO_MANY_MISSES)
+    {
         if (sequenceLength > 3)
         {
             Log.info("Decreasing sequence length! %u", sequenceLength);
@@ -424,57 +456,64 @@ bool playLearningLongerSequences(){
 
     // Send report
     // TODO this report might get too long for particle publish size limits
-    if(!timeout){
+    if (!timeout)
+    {
         Log.info("Sending report");
 
-        String extra ="{";
+        String extra = "{";
         extra += "\"targetSeq\":\"";
-        for (int i = 0; i < sequenceLength; ++i){
+        for (int i = 0; i < sequenceLength; ++i)
+        {
             extra += convertBitfieldToLetter(touchpad_sequence[i]);
         }
         extra += "\",\"pressedSeq\":\"";
         // TODO also report wrong touches that deducted lives?
-        for (int i = 0; i < sequenceLength; ++i){
-            extra += convertBitfieldToSingleLetter(touchpad_sequence[i],pressed[i+1]);
+        for (int i = 0; i < sequenceLength; ++i)
+        {
+            extra += convertBitfieldToSingleLetter(touchpad_sequence[i], pressed[i + 1]);
         }
-        extra += String::format("\",\"lives\":%d",lives);
-        if (challengeComplete) {extra += ",\"challengeComplete\":1";}
+        extra += String::format("\",\"lives\":%d", lives);
+        if (challengeComplete)
+        {
+            extra += ",\"challengeComplete\":1";
+        }
         extra += "}";
 
         // Log.info(extra);
 
         hub.Report(Time.format(gameStartTime,
-                               TIME_FORMAT_ISO8601_FULL),  // play_start_time
-                   PlayerName,                             // player
-                   sequenceLength,                         // level
-                   String(accurate),                       // result
-                   activityDuration,                       // duration
-                   accurate,           // foodtreat_presented
-                   foodtreatWasEaten,  // foodtreatWasEaten
-                   extra               // extra field
+                               TIME_FORMAT_ISO8601_FULL), // play_start_time
+                   PlayerName,                            // player
+                   sequenceLength,                        // level
+                   String(accurate),                      // result
+                   activityDuration,                      // duration
+                   accurate,                              // foodtreat_presented
+                   foodtreatWasEaten,                     // foodtreatWasEaten
+                   extra                                  // extra field
         );
     }
 
     // printPerformanceArray();
 
-    if(!accurate){
+    if (!accurate)
+    {
         // between interaction time if wrong
         yield_sleep_ms(INTER_GAME_DELAY, false);
     }
 
-    hub.SetDIResetLock(false);  // allow DI board to reset if needed between interactions
+    hub.SetDIResetLock(false); // allow DI board to reset if needed between interactions
     yield_finish();
     return true;
 }
-
 
 /**
  * Setup function
  * --------------
  */
-void setup() {
-  // Initializes the hub and passes the current filename as ID for reporting
-  hub.Initialize(__FILE__);
+void setup()
+{
+    // Initializes the hub and passes the current filename as ID for reporting
+    hub.Initialize(__FILE__);
 }
 
 /**
@@ -493,7 +532,8 @@ void loop()
     // Will return true if level is done
     gameIsComplete = playLearningLongerSequences();
 
-    if(gameIsComplete){
+    if (gameIsComplete)
+    {
         // Interaction end
         return;
     }

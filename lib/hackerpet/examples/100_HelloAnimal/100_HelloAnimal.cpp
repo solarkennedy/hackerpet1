@@ -18,7 +18,7 @@
 // https://docs.particle.io/reference/device-os/firmware/photon/#system-thread
 SYSTEM_THREAD(ENABLED);
 
-#define PLAYER_NAME "Pet, Clever"             // player
+#define PLAYER_NAME "Pet, Clever" // player
 
 // access to hub functionality (lights, foodtreats, etc.)
 HubInterface hub;
@@ -29,24 +29,20 @@ bool HelloAnimal()
     static unsigned long timer_ms;
     static unsigned long playstart;
 
-
     // before starting interaction, wait until:
     //  0. Device is on.
     //  1. device layer is ready (in a good state)
     //  2. foodmachine is "idle", meaning it is not spinning or dispensing
     //          and tray is retracted (see FOODMACHINE_... constants)
     //  3. no touchpad is currently pressed
-    yield_wait_for(hub.IsReady()
-                        && hub.FoodmachineState() == hub.FOODMACHINE_IDLE
-                        && not hub.AnyButtonPressed(),
-                    false);
+    yield_wait_for(hub.IsReady() && hub.FoodmachineState() == hub.FOODMACHINE_IDLE && not hub.AnyButtonPressed(),
+                   false);
 
     // mark the start time of the interaction
     playstart = Time.now();
 
     // start the timer
     timer_ms = millis();
-
 
     // DI reset occurs if, for example, DL detects that touchpads
     // need re- calibration, such as when a hub is moved to a
@@ -71,20 +67,19 @@ bool HelloAnimal()
     // keep them off for 1000 ms
     yield_sleep_ms(1000, false);
 
-
     // allow DI board to reset if needed between interactions -- should
     // probably be last thing done before hub.Run() and
     // waiting until hub.IsReady(), etc.
     hub.SetDIResetLock(false);
 
-    hub.Report( Time.format(playstart, TIME_FORMAT_ISO8601_FULL),    // play_start_time
-                PLAYER_NAME,        // player
-                0,                  // level -- 0 because there are no levels here
-                "PAD_TOUCHED",      // result
-                timer_ms,           // how long it took for the pad to get pressed
-                0,                  // foodtreat_presented
-                0                   // foodtreat_eaten
-            );
+    hub.Report(Time.format(playstart, TIME_FORMAT_ISO8601_FULL), // play_start_time
+               PLAYER_NAME,                                      // player
+               0,                                                // level -- 0 because there are no levels here
+               "PAD_TOUCHED",                                    // result
+               timer_ms,                                         // how long it took for the pad to get pressed
+               0,                                                // foodtreat_presented
+               0                                                 // foodtreat_eaten
+    );
 
     yield_finish();
     return true;
@@ -92,10 +87,9 @@ bool HelloAnimal()
 
 void setup()
 {
-  // Initializes the hub and passes the current filename as ID for reporting
-  hub.Initialize(__FILE__);
+    // Initializes the hub and passes the current filename as ID for reporting
+    hub.Initialize(__FILE__);
 }
-
 
 void loop()
 {
