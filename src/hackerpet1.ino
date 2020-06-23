@@ -41,6 +41,11 @@ const char PlayerName[] = "Pet, Clever";
 int hourOfTheDay = 0;
 bool isPaused = false;
 volatile bool isManuallyTriggered = false;
+long duration = 0;
+#include "MFRC522.h"
+#define SS_PIN A2
+#define RST_PIN A1
+MFRC522 mfrc522(SS_PIN, RST_PIN); // Create MFRC522 instance.
 
 /**
  * Challenge settings
@@ -113,6 +118,26 @@ unsigned int countMisses()
 }
 
 // Custom Functions
+void readRFID()
+{
+  if (mfrc522.PICC_IsNewCardPresent())
+  {
+    Serial.println("New RFID present...");
+    if (mfrc522.PICC_ReadCardSerial())
+    {
+      String UID = "";
+      for (byte i = 0; i < mfrc522.uid.size; i++)
+      {
+        UID += String(mfrc522.uid.uidByte[i] < 0x10 ? "0" : "");
+        UID += String(mfrc522.uid.uidByte[i], HEX);
+      }
+      mfrc522.PICC_HaltA();
+      Serial.print("UID: ");
+      Serial.println(UID);
+      functionManuallyTriggered("");
+    }
+  }
+}
 int functionPause(String command)
 {
   isPaused = true;
@@ -172,6 +197,9 @@ void registerCustomStuff()
   Particle.variable("currentLevel", currentLevel);
   Particle.variable("hourOfTheDay", hourOfTheDay);
   Particle.variable("isPaused", isPaused);
+
+  mfrc522.setSPIConfig();
+  mfrc522.PCD_Init(); // Init MFRC522 card
 
   hub.PlayAudio(hub.AUDIO_ENTICE, 99);
   char report[621];
@@ -313,6 +341,7 @@ bool playAvoidingUnlitTouchpads()
   {
     // detect any touchpads currently pressed
     pressed = hub.AnyButtonPressed();
+    readRFID();
     yield(false); // use yields statements any time the hub is pausing or waiting
   } while (
       (pressed != hub.BUTTON_LEFT // we want it to just be a single touchpad
