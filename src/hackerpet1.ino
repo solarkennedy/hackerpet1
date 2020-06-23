@@ -1,30 +1,29 @@
 /**
-  Engaging Consistently
-  =====================
+  Avoiding Unlit Touchpads
+  ========================
 
-    This challenge takes off the training wheels and no longer offers your
-    player free foodtreats. Now your player will need to press a touchpad to
-    earn a reward.
+    This is the fourth challenge from the original CleverPet learning
+    curriculum.
 
-    Through repeated action and feedback from the Hub, players learn that the
-    front of the Hub — where the touchpads are — is the most interesting part.
-    Before this challenge, a very patient player could hang out and simply wait
-    for foodtreats to arrive on their own.
+    In this challenge only two of the three touchpads are lit, and your player
+    must learn that only pressing illuminated touchpads will result in a reward.
+    This is the first time the Hub’s lights begin to serve as meaningful cues.
+    Using trial and error, your player will gather evidence and figure out how
+    the Hub works, and what to do to earn a reward. All attempts to get kibble
+    (whether successful or not) are part of the learning process. As the player
+    learns, they will hit the unlit touchpads less and less often.
 
-    **Challenge logic:** This challenge uses a combination of performance and a
-    timer to progress the game-play. There are 3 levels and 3 corresponding
-    timer durations (10 minutes, 10 minutes, and 5 minutes respectively). The
-    timer starts running, and the player can play so long as the timer hasn't
-    expired. During the challenge the player levels up if 10 foodtreats have
-    been eaten. When the timer expires, the level is checked and the
-    corresponding timer length is loaded into the timer. The current count of
-    foodtreats eaten is cleared and new interactions can continue to be played
-    while the timer is running. Once the player reaches level 3 and eats 10
-    foodtreats the max level is reached. Leveling down requires many misses,
-    since the player would need to fail to consume 99 foodtreats in one level.
-    When this happens, the timer is immediately reset and the duration is
-    adjusted. Another way to level down is be to ignore the touchpads, which
-    will make the current interaction time-out.
+    **Challenge logic:** This challenge has 2 levels. The first level chooses 2
+    targets at random. If 1 of the targets is pressed, the accurate flag is set
+    and a foodtreat is dispensed. If accurate, a positive interaction is added
+    to the performance history. When 18 of the previous 20 interactions are
+    accurate, the player levels up. At level 2 the interaction is identical save
+    that if the player has gotten it wrong they will have to redo the
+    interaction: if the player pushes the wrong touchpad, the player will be
+    presented with the same targets on the next interaction. This prevents the
+    player from developing and keeping a favorite touchpad. If the interaction
+    times out, a miss wil be added to the performance array. Between
+    interactions there is a random wait of between 1 and 8 seconds.
 
   Authors: CleverPet Inc.
            Jelmer Tiete <jelmer@tiete.be>
@@ -39,7 +38,6 @@
 const char PlayerName[] = "Pet, Clever";
 
 // # Custom Stuff
-int currentLevel = 1; // starting level
 int hourOfTheDay = 0;
 bool isPaused = false;
 volatile bool isManuallyTriggered = false;
@@ -51,20 +49,17 @@ volatile bool isManuallyTriggered = false;
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-
-const int MAX_LEVEL = 3;
-const unsigned long CHALLENGE_TIMER_DURATIONS[MAX_LEVEL] = {600000,  // level 1: 10 mins
-                                                            600000,  // level 2: 10 mins
-                                                            300000}; // level 3: 5 mins
-const int HISTORY_LENGTH = 100;                                      // Number of previous interactions to look at for
-                                                                     // performance This challenge uses a timer, so doesn't
-                                                                     // care about history length.
-const int ENOUGH_SUCCESSES = 10;                                     // if pos interactions >= ENOUGH_SUCCESSES level-up
-const int TOO_MANY_MISSES = 99;                                      // if neg interactions >= TOO_MANY_MISSES level-down
-const int YELLOW = 60;                                               // touchpad color
-const int BLUE = 60;                                                 // touchpad color
-const int FLASHING = 0;                                              // touchpad 0: no FLASHING
-const int FLASHING_DUTY_CYCLE = 99;                                  // ignored since no FLASHING
+int currentLevel = 1;                           // starting and current level
+const int MAX_LEVEL = 2;                        // Maximum number of levels
+const int HISTORY_LENGTH = 20;                  // Number of previous interactions to look at for
+                                                // performance
+const int ENOUGH_SUCCESSES = 18;                // if num successes >= ENOUGH_SUCCESSES level-up
+const unsigned long FOODTREAT_DURATION = 20000; // (ms) how long to present foodtreat
+const int FLASHING = 0;
+const int FLASHING_DUTY_CYCLE = 99;
+const unsigned long TIMEOUT_MS = 60000; // (ms) how long to wait until restarting
+                                        // the interaction
+const int NUM_PADS = 2;                 // Choose number of lit-up pads at a time (1, 2 or 3)
 
 /**
  * Global variables and constants
@@ -74,13 +69,9 @@ const unsigned long SOUND_FOODTREAT_DELAY = 1200; // (ms) delay for reward sound
 const unsigned long SOUND_TOUCHPAD_DELAY = 300;   // (ms) delay for touchpad sound
 
 bool performance[HISTORY_LENGTH] = {0}; // store the progress in this challenge
-unsigned char perfPos = 0;              // to keep our position in the performance array
-unsigned char perfDepth = 0;            // to keep the size of the number of perf numbers
-                                        // to consider
-// timer values to check if challenge should continue
-unsigned long challenge_timer_before, challenge_timer_length = 0;
-bool reset_challenge_timer = true; // bool to check if timer time should be
-                                   // updated
+int perfPos = 0;                        // to keep our position in the performance array
+int perfDepth = 0;                      // to keep the size of the number of perf numbers to
+                                        // consider
 
 // Use primary serial over USB interface for logging output (9600)
 // Choose logging level here (ERROR, WARN, INFO)
@@ -101,7 +92,7 @@ SYSTEM_THREAD(ENABLED);
  * ----------------
  */
 
-//// return the number of positive interactions in performance history for current level
+/// return the number of successful interactions in performance history for current level
 unsigned int countSuccesses()
 {
   unsigned int total = 0;
@@ -111,7 +102,7 @@ unsigned int countSuccesses()
   return total;
 }
 
-/// return the number of negative interactions in performance history for current level
+/// return the number of misses in performance history for current level
 unsigned int countMisses()
 {
   unsigned int total = 0;
@@ -150,7 +141,7 @@ int functionReboot(String command)
 {
   System.reset();
 }
-bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionTime, int countSuccesses, int countMisses, bool challengeComplete)
+bool sendPushNotification(int level, int foodtreatWasEaten, int activityDuration, int countSuccesses, int countMisses, bool challengeComplete)
 {
   char report[621];
   String taken_string;
@@ -162,7 +153,7 @@ bool sendPushNotification(int currentLevel, int foodtreatWasEaten, int reactionT
   {
     taken_string = "But she didn't eat the treat.";
   }
-  snprintf(report, sizeof(report), "She played! %s", taken_string.c_str());
+  snprintf(report, sizeof(report), "She played level %d! %s Duration: %d", level, taken_string.c_str(), activityDuration);
   return Particle.publish("hackerpet-push", report, 60, PRIVATE);
 }
 bool isBusinessHours()
@@ -197,7 +188,7 @@ void resetPerformanceHistory()
   perfDepth = 0;
 }
 
-// add an interaction result to the performance history
+/// add an interaction result to the performance history
 void addResultToPerformanceHistory(bool entry)
 {
   // Log.info("Adding %u", entry);
@@ -217,43 +208,68 @@ void addResultToPerformanceHistory(bool entry)
 /// print the performance history for debugging
 void printPerformanceArray()
 {
-  Serial.printf("performance: ");
-  for (unsigned char i = 0; i < HISTORY_LENGTH; i++)
+  Serial.printf("performance: {");
+  for (unsigned char i = 0; i < perfDepth; i++)
+  {
     Serial.printf("%u", performance[i]);
-  Serial.printf("\n");
+    if ((i + 1) == perfPos)
+      Serial.printf("|");
+  }
+  Serial.printf("}\n");
 }
 
-/// The actual EngagingConsistently challenge. This function needs to be called in a loop.
-bool playEngagingConsistently()
+/// converts a bitfield of pressed touchpads to letters
+/// multiple consecutive touches are possible and will be reported L -> M - > R
+/// @returns String
+String convertBitfieldToLetter(unsigned char pad)
+{
+  String letters = "";
+  if (pad & hub.BUTTON_LEFT)
+    letters += 'L';
+  if (pad & hub.BUTTON_MIDDLE)
+    letters += 'M';
+  if (pad & hub.BUTTON_RIGHT)
+    letters += 'R';
+  return letters;
+}
+
+/// The actual AvoidingUnlitTouchpads challenge. This function needs to be called in a loop.
+bool playAvoidingUnlitTouchpads()
 {
   yield_begin();
 
-  static unsigned long gameStartTime, timestampBefore, reactionTime = 0;
-  static unsigned char foodtreatState = 99;
-  static bool foodtreatWasEaten = false; // store if foodtreat was eaten in last interaction
+  static unsigned long gameStartTime, timestampBefore, activityDuration = 0;
+  static unsigned char target = 0;      // bitfield, holds target touchpad
+  static unsigned char retryTarget = 0; // should not be re-initialized
+  static int foodfoodtreatState = 99;
+  static unsigned char pressed = 0; // bitfield, holds pressed touchpad
+  static unsigned long timestampTouchpad = 0;
+  static bool foodtreatWasEaten = false; // store if foodtreat was eaten
+  static bool accurate = false;
   static bool timeout = false;
   static bool challengeComplete = false; // do not re-initialize
-  static int tray_duration = 32000;
-  static int duration = 0;
-  static int timeout_duration = 300000; // 5 mins
-  static unsigned char pressed = 0;     // to hold the pressed touchpad
+  static int yellow = 60;                // touchpad color, is randomized
+  static int blue = 60;                  // touchpad color, is randomized
 
   // Static variables and constants are only initialized once, and need to be re-initialized
   // on subsequent calls
   gameStartTime = 0;
   timestampBefore = 0;
-  reactionTime = 0;
-  foodtreatState = 99;
-  foodtreatWasEaten = false; // store if foodtreat was eaten in last interaction
+  activityDuration = 0;
+  target = 0; // bitfield, holds target touchpad
+  foodfoodtreatState = 99;
+  pressed = 0; // bitfield, holds pressed touchpad
+  timestampTouchpad = 0;
+  foodtreatWasEaten = false; // store if foodtreat was eaten
+  accurate = false;
   timeout = false;
-  tray_duration = 32000;
-  timeout_duration = 300000; // 5 mins
-  pressed = 0;               // to hold the pressed touchpad
+  yellow = 60; // touchpad color, is randomized
+  blue = 60;   // touchpad color, is randomized
 
   Log.info("-------------------------------------------");
-  // Log.info("Starting new \"Engaging Consistently\" challenge");
-  Log.info("Current level: %u, successes: %u, number of misses: %u", currentLevel,
-           countSuccesses(), countMisses());
+  Log.info("Starting new \"Avoiding Unlit Touchpads\" challenge");
+  // Log.info("Current level: %u, successes: %u, number of misses: %u",
+  //     currentLevel, countSuccesses(), countMisses());
 
   gameStartTime = Time.now();
 
@@ -264,46 +280,70 @@ bool playEngagingConsistently()
   //  3. no touchpad is currently pressed
   yield_wait_for((hub.IsReady() &&
                   hub.FoodmachineState() == hub.FOODMACHINE_IDLE &&
-                  not hub.AnyButtonPressed()),
+                  !hub.AnyButtonPressed()),
                  false);
 
-  // DI reset occurs if, for example, device layer detects that touchpads
-  // need re-calibration
+  // DI reset occurs if, for example, device  layer detects that touchpads need
+  // re-calibration
   hub.SetDIResetLock(true);
 
   // Record start timestamp for performance logging
   timestampBefore = millis();
 
-  // Turn on touchpad lights
-  hub.SetRandomButtonLights(3, YELLOW, BLUE, FLASHING, FLASHING_DUTY_CYCLE);
+  yellow = random(20, 90); // pick a yellow for interaction
+  blue = random(20, 90);   // pick a blue for interaction
 
-  // Wait here until a touchpad is pressed or until we have a timeout
-  do
+  if (retryTarget != 0)
   {
-    pressed = hub.AnyButtonPressed();
-    yield(false);
-  } while ((pressed != hub.BUTTON_LEFT && pressed != hub.BUTTON_MIDDLE &&
-            pressed != hub.BUTTON_RIGHT && isManuallyTriggered != true) &&
-           millis() < (timestampBefore + timeout_duration));
-
-  // Record time period for performance logging
-  reactionTime = millis() - timestampBefore;
-
-  // Turn off lights
-  hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0);
-
-  // Check result
-  if (pressed == 0 && !isManuallyTriggered)
-  {
-    Log.info("No touchpad pressed, we have a timeout or a manual trigger");
-    timeout = true;
-    foodtreatWasEaten = false;
+    Log.info("We're doing a retry interaction");
+    target = retryTarget;
+    hub.SetLights(target, yellow, blue, FLASHING, FLASHING_DUTY_CYCLE);
   }
   else
   {
-    Log.info("Button or manual trigger pressed, dispensing foodtreat");
-    timeout = false;
+    // choose some target lights, and store which targets were randomly chosen
+    target = hub.SetRandomButtonLights(NUM_PADS, yellow, blue, FLASHING,
+                                       FLASHING_DUTY_CYCLE);
+  }
 
+  // progress to next state
+  timestampTouchpad = millis();
+
+  do
+  {
+    // detect any touchpads currently pressed
+    pressed = hub.AnyButtonPressed();
+    yield(false); // use yields statements any time the hub is pausing or waiting
+  } while (
+      (pressed != hub.BUTTON_LEFT // we want it to just be a single touchpad
+       && pressed != hub.BUTTON_MIDDLE && pressed != hub.BUTTON_RIGHT) &&
+      millis() < timestampTouchpad + TIMEOUT_MS && !isManuallyTriggered);
+
+  // record time period for performance logging
+  activityDuration = millis() - timestampBefore;
+
+  hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off lights
+
+  // Check touchpads and accuracy
+  if (pressed == 0)
+  {
+    Log.info("No touchpad pressed, we have a timeout");
+    timeout = true;
+    accurate = false;
+  }
+  else
+  {
+    // Log.info("Button pressed");
+    timeout = false;
+    accurate = !((pressed & target) == 0); // will be zero if and only if the
+  }                                        // wrong touchpad was touched
+
+  foodtreatWasEaten = false;
+
+  // Check result and consequences
+  if (accurate || isManuallyTriggered)
+  {
+    Log.info("Correct touchpad pressed or manually triggered, dispensing foodtreat");
     // give the Hub a moment to finish playing the touchpad sound
     yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
     // Play "reward" sound
@@ -313,26 +353,27 @@ bool playEngagingConsistently()
       hub.PlayAudio(hub.AUDIO_CLICK, 99);
       // give the Hub a moment to finish playing the reward sound
       //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
-      duration = 320000;
+      duration = 32000;
     }
     else
     {
       hub.PlayAudio(hub.AUDIO_POSITIVE, 99);
       // give the Hub a moment to finish playing the reward sound
       //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
-      duration = tray_duration;
+      duration = FOODTREAT_DURATION;
     }
 
     // Dispense a foodtreat and wait until the tray is closed again
     do
     {
-      foodtreatState = hub.PresentAndCheckFoodtreat(duration);
+      foodfoodtreatState =
+          hub.PresentAndCheckFoodtreat(duration); // time pres (ms)
       yield(false);
-    } while (foodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
-             foodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
+    } while (foodfoodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
+             foodfoodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
 
     // Check if foodtreat was eaten
-    if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
+    if (foodfoodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
     {
       Log.info("Foodtreat was eaten");
       foodtreatWasEaten = true;
@@ -343,11 +384,26 @@ bool playEngagingConsistently()
       foodtreatWasEaten = false;
     }
   }
+  else
+  {
+    if (!timeout) // don't play any audio if there's a timeout (no response -> no
+                  // consequence)
+    {
+      Log.info("Wrong touchpad pressed");
+      // give the Hub a moment to finish playing the touchpad sound
+      yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
+      // if unsuccessful interaction: play negative feedback sound at low volume
+      hub.PlayAudio(hub.AUDIO_NEGATIVE, 50);
+      yield_sleep_ms(
+          SOUND_FOODTREAT_DELAY,
+          false); // give the Hub a moment to finish playing the sound
+    }
+  }
 
   // Check if we're ready for next challenge
   if (currentLevel == MAX_LEVEL)
   {
-    addResultToPerformanceHistory(foodtreatWasEaten);
+    addResultToPerformanceHistory(accurate);
     if (countSuccesses() >= ENOUGH_SUCCESSES)
     {
       Log.info("At MAX level! %u", currentLevel);
@@ -358,7 +414,7 @@ bool playEngagingConsistently()
   else
   {
     // Increase level if foodtreat eaten and good performance in this level
-    addResultToPerformanceHistory(foodtreatWasEaten);
+    addResultToPerformanceHistory(accurate);
     if (countSuccesses() >= ENOUGH_SUCCESSES)
     {
       if (currentLevel < MAX_LEVEL)
@@ -370,42 +426,53 @@ bool playEngagingConsistently()
     }
   }
 
-  // Decrease level if bad performance in this level
-  // BAD_PERFORMACE is really high, so will never come here
-  if (countMisses() >= TOO_MANY_MISSES)
-  {
-    if (currentLevel > 1)
-    {
-      currentLevel--;
-      Log.info("Leveling DOWN %u", currentLevel);
-      reset_challenge_timer = true;
-    }
-  }
-
-  if (timeout != true && isManuallyTriggered != true)
+  if (!timeout && accurate)
   {
     // Send report
     Log.info("Sending report");
-    String extra = String::format(
-        "{\"pos_tries\":%u,\"neg_tries\":%u", countSuccesses(), countMisses());
+
+    String extra = "{\"targets\":\"";
+    extra += convertBitfieldToLetter(target);
+    extra += "\",\"pressed\":\"";
+    extra += convertBitfieldToLetter(pressed);
+    extra += String::format("\",\"retryGame\":\"%c\"", retryTarget ? '1' : '0');
     if (challengeComplete)
+    {
       extra += ",\"challengeComplete\":1";
+    }
     extra += "}";
-    hub.Report(
-        Time.format(gameStartTime, TIME_FORMAT_ISO8601_FULL), // play_start_time
-        PlayerName,                                           // player
-        currentLevel,                                         // level //TODO is this the correct level?
-        String(foodtreatWasEaten),                            // result
-        reactionTime,                                         // duration -> linked to level and includes tray movement
-        1,                                                    // foodtreat_presented
-        foodtreatWasEaten,                                    // foodtreatWasEaten
-        extra                                                 // extra field
+
+    hub.Report(Time.format(gameStartTime,
+                           TIME_FORMAT_ISO8601_FULL), // play_start_time
+               PlayerName,                            // player
+               currentLevel,                          // level
+               String(accurate),                      // result
+               activityDuration,                      // duration -> linked to level and includes
+                                                      // tray movement
+               accurate,                              // foodtreat_presented
+               foodtreatWasEaten,                     // foodtreatWasEaten
+               extra                                  // extra field
     );
-    sendPushNotification(currentLevel, foodtreatWasEaten, reactionTime, countSuccesses(), countMisses(), challengeComplete);
+    sendPushNotification(currentLevel, foodtreatWasEaten, activityDuration, countSuccesses(), countMisses(), challengeComplete);
   }
 
+  // Check if we need to do, or reset a retry interaction
+  if (accurate)
+  {
+    // Reset retry interaction
+    retryTarget = 0;
+  }
+  else if (!timeout && (currentLevel > 1))
+  {
+    retryTarget = target;
+  }
+
+  // printPerformanceArray();
   if (isManuallyTriggered == true)
     unsetManuallyTriggered();
+
+  // between interaction wait time
+  yield_sleep_ms((unsigned long)random(1000, 8000), false);
 
   hub.SetDIResetLock(false); // allow DI board to reset if needed between interactions
   yield_finish();
@@ -435,31 +502,12 @@ void loop()
   // spent per loop cycle.
   hub.Run(20);
 
-  // if the challenge timer expired we need to reset it
-  if (reset_challenge_timer)
-  {
-    // Log.info("Timer reset");
-    resetPerformanceHistory();
-    challenge_timer_before = millis();
-    challenge_timer_length = CHALLENGE_TIMER_DURATIONS[currentLevel - 1];
-    reset_challenge_timer = false;
-  }
-
-  // Keep playing interactions as long as timer didn't expire
-  if (millis() <= (challenge_timer_before + challenge_timer_length))
-  {
-    // Play 1 level of the EngagingConsistently challenge
-    // Will return true if level is done
-    gameIsComplete = playEngagingConsistently();
-  }
-  else
-  {
-    // Log.info("Timer expired");
-    reset_challenge_timer = true;
-  }
+  // Play 1 interaction of the playAvoidingUnlitTouchpads challenge
+  gameIsComplete = playAvoidingUnlitTouchpads(); // Returns true if level is done
 
   if (gameIsComplete)
   {
+    // Interaction end
     return;
   }
 }
