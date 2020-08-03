@@ -380,23 +380,17 @@ bool playAvoidingUnlitTouchpads()
     if (isManuallyTriggered == true)
     {
       hub.PlayAudio(hub.AUDIO_CLICK, 99);
-      // give the Hub a moment to finish playing the reward sound
-      //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
-      duration = 32000;
     }
     else
     {
       hub.PlayAudio(hub.AUDIO_POSITIVE, 99);
-      // give the Hub a moment to finish playing the reward sound
-      //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
-      duration = FOODTREAT_DURATION;
     }
 
     // Dispense a foodtreat and wait until the tray is closed again
     do
     {
       foodfoodtreatState =
-          hub.PresentAndCheckFoodtreat(duration); // time pres (ms)
+          hub.PresentAndCheckFoodtreat(FOODTREAT_DURATION); // time pres (ms)
       yield(false);
     } while (foodfoodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
              foodfoodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
