@@ -35,7 +35,7 @@
 #include <hackerpet.h>
 
 // Set this to the name of your player (dog, cat, etc.)
-const char PlayerName[] = "Pet, Clever";
+char PlayerName[20] = "Pet, Clever";
 
 // # Custom Stuff
 int hourOfTheDay = 0;
@@ -166,19 +166,13 @@ int functionReboot(String command)
 {
   System.reset();
 }
-bool sendPushNotification(int level, int foodtreatWasEaten, int activityDuration, int countSuccesses, int countMisses, bool challengeComplete)
+bool sendPushNotification(int level, int foodtreatWasEaten, int activityDuration, int countSuccesses, int countMisses, bool accurate, bool manuallyTrigger)
 {
   char report[621];
   String taken_string;
-  if (foodtreatWasEaten == 1)
-  {
-    taken_string = "and she ate the treat!";
-  }
-  else
-  {
-    taken_string = "But she didn't eat the treat.";
-  }
-  snprintf(report, sizeof(report), "She played level %d! %s Duration: %d", level, taken_string.c_str(), activityDuration);
+  taken_string = foodtreatWasEaten == 1 ? "And she ate the treat!" : "But she didn't eat the treat.";
+  String winOrLost = accurate ? "Won" : "Lost";
+  snprintf(report, sizeof(report), "%s %s! %s", PlayerName, winOrLost.c_str(), taken_string.c_str());
   return Particle.publish("hackerpet-push", report, 60, PRIVATE);
 }
 bool isBusinessHours()
@@ -379,10 +373,12 @@ bool playAvoidingUnlitTouchpads()
 
     if (isManuallyTriggered == true)
     {
+      strcpy(PlayerName, "Okami");
       hub.PlayAudio(hub.AUDIO_CLICK, 99);
     }
     else
     {
+      strcpy(PlayerName, "Luna");
       hub.PlayAudio(hub.AUDIO_POSITIVE, 99);
     }
 
@@ -449,7 +445,7 @@ bool playAvoidingUnlitTouchpads()
     }
   }
 
-  if (!timeout && accurate)
+  if (!timeout || isManuallyTriggered)
   {
     // Send report
     Log.info("Sending report");
@@ -476,7 +472,7 @@ bool playAvoidingUnlitTouchpads()
                foodtreatWasEaten,                     // foodtreatWasEaten
                extra                                  // extra field
     );
-    sendPushNotification(currentLevel, foodtreatWasEaten, activityDuration, countSuccesses(), countMisses(), challengeComplete);
+    sendPushNotification(currentLevel, foodtreatWasEaten, activityDuration, countSuccesses(), countMisses(), accurate, PlayerName);
   }
 
   // Check if we need to do, or reset a retry interaction
