@@ -1,29 +1,29 @@
 /**
-  Avoiding Unlit Touchpads
-  ========================
+  Responding Quickly
+  ====================
 
-    This is the fourth challenge from the original CleverPet learning
+    This is the seventh challenge from the original CleverPet learning
     curriculum.
 
-    In this challenge only two of the three touchpads are lit, and your player
-    must learn that only pressing illuminated touchpads will result in a reward.
-    This is the first time the Hub’s lights begin to serve as meaningful cues.
-    Using trial and error, your player will gather evidence and figure out how
-    the Hub works, and what to do to earn a reward. All attempts to get kibble
-    (whether successful or not) are part of the learning process. As the player
-    learns, they will hit the unlit touchpads less and less often.
+    In this challenge, immediately after your player presses one illuminated
+    touchpad, a different one lights up and must be touched. Your player now has
+    to press two touchpads in a row to solve one puzzle. Chaining behaviors
+    together requires that your player complete multiple correct actions in
+    sequence to earn a reward. Your player must learn to stay attentive for a
+    second instruction even after the first press.
 
-    **Challenge logic:** This challenge has 2 levels. The first level chooses 2
-    targets at random. If 1 of the targets is pressed, the accurate flag is set
-    and a foodtreat is dispensed. If accurate, a positive interaction is added
-    to the performance history. When 18 of the previous 20 interactions are
-    accurate, the player levels up. At level 2 the interaction is identical save
-    that if the player has gotten it wrong they will have to redo the
-    interaction: if the player pushes the wrong touchpad, the player will be
-    presented with the same targets on the next interaction. This prevents the
-    player from developing and keeping a favorite touchpad. If the interaction
-    times out, a miss wil be added to the performance array. Between
-    interactions there is a random wait of between 1 and 8 seconds.
+    **Challenge logic:** This challenge has 4 levels. With each higher level the
+    maximum reaction time decreases. One interaction consists of 2 moves, in
+    each move 1 touchpad lights up and has to be touched to advance. The
+    reaction time is the time between the first and second moves. If 17
+    successful interactions occur over  the previous 20, the player levels up.
+    After 17 misses the player levels down. On a miss there will be a
+    between-interaction delay. For the player's first move  multiple touchpads
+    can be touched, as long as the lit up touchpad was one of them (player has
+    unlimited opportunities to try and get it right). The second touch, however,
+    allows only the lit up touchpad to be touched, and the interaction will
+    result in a miss if any of the lit touchpads is pressed more than once, or
+    if the unlit touchpad is pressed at all.
 
   Authors: CleverPet Inc.
            Jelmer Tiete <jelmer@tiete.be>
@@ -33,9 +33,10 @@
 */
 
 #include <hackerpet.h>
+#include <algorithm>
 
 // Set this to the name of your player (dog, cat, etc.)
-char PlayerName[20] = "Pet, Clever";
+const char PlayerName[] = "Pet, Clever";
 
 // # Custom Stuff
 int hourOfTheDay = 0;
@@ -54,17 +55,20 @@ MFRC522 mfrc522(SS_PIN, RST_PIN); // Create MFRC522 instance.
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-int currentLevel = 1;                           // starting and current level
-const int MAX_LEVEL = 2;                        // Maximum number of levels
-const int HISTORY_LENGTH = 20;                  // Number of previous interactions to look at for
-                                                // performance
-const int ENOUGH_SUCCESSES = 18;                // if num successes >= ENOUGH_SUCCESSES level-up
-const unsigned long FOODTREAT_DURATION = 20000; // (ms) how long to present foodtreat
-const int FLASHING = 0;
-const int FLASHING_DUTY_CYCLE = 99;
-const unsigned long TIMEOUT_MS = 60000; // (ms) how long to wait until restarting
-                                        // the interaction
-const int NUM_PADS = 2;                 // Choose number of lit-up pads at a time (1, 2 or 3)
+int currentLevel = 1;
+const int MAX_LEVEL = 4; // Maximum number of levels
+const unsigned long MAX_REACTION_TIME[MAX_LEVEL] = {30000, 8000, 4000, 2000};
+const int HISTORY_LENGTH = 20;        // Number of previous interactions to look at for
+                                      // performance
+const int ENOUGH_SUCCESSES = 17;      // if num successes >= ENOUGH_SUCCESSES level-up
+const int TOO_MANY_MISSES = 17;       // if num misses >= TOO_MANY_MISSES level-down
+const long FOODTREAT_DURATION = 6000; // (ms) how long to present foodtreat
+const int YELLOW = 80;
+const int BLUE = 80;
+const int SLEW = 20;                     // touchpad fade-in time [0-99]
+const unsigned long TIMEOUT_MS = 300000; // (ms) how long to wait until
+                                         // restarting the interaction
+const unsigned long INTER_GAME_DELAY = 6000;
 
 /**
  * Global variables and constants
@@ -72,6 +76,7 @@ const int NUM_PADS = 2;                 // Choose number of lit-up pads at a tim
  */
 const unsigned long SOUND_FOODTREAT_DELAY = 1200; // (ms) delay for reward sound
 const unsigned long SOUND_TOUCHPAD_DELAY = 300;   // (ms) delay for touchpad sound
+const unsigned long VIEW_WINDOW = 500;            // time delay for viewing the touchpad
 
 bool performance[HISTORY_LENGTH] = {0}; // store the progress in this challenge
 int perfPos = 0;                        // to keep our position in the performance array
@@ -86,7 +91,7 @@ SerialLogHandler logHandler(LOG_LEVEL_INFO, {
                                                 {"app", LOG_LEVEL_INFO}             // Logging level for application messages
                                             });
 
-// access to hub functionality (lights, foodtreats, etc.)
+// initialize hub interface (from hackerpet)
 HubInterface hub;
 
 // enables simultaneous execution of application and system thread
@@ -223,7 +228,7 @@ void addResultToPerformanceHistory(bool entry)
     perfPos = 0;
   }
   // Log.info("perfPos %u, perfDepth %u", perfPos, perfDepth);
-  Log.info("New successes: %u, misses: %u", countSuccesses(),
+  Log.info("New successful interactions: %u, misses: %u", countSuccesses(),
            countMisses());
 }
 
@@ -255,43 +260,80 @@ String convertBitfieldToLetter(unsigned char pad)
   return letters;
 }
 
-/// The actual AvoidingUnlitTouchpads challenge. This function needs to be called in a loop.
-bool playAvoidingUnlitTouchpads()
+/// converts requested touchpad bitfield and pressed touchpad bitfield to a
+/// letter. Requested bitfield should have only one bit set. Touched pad bitfield
+/// can have multiple bits set. If correct, the correct pad will be returned, if
+/// wrong only the wrong pad will be returned, if multiple wrong pads pressed,
+/// only one wrong pad will be returned in order L -> M -> R
+/// @returns String
+String convertBitfieldToSingleLetter(unsigned char targetPad, unsigned char pad)
+{
+  if ((targetPad & (targetPad - 1)) != 0) // error targetPad has multiple pads set
+    return "X";
+
+  String letter = "";
+  if (targetPad == pad)
+  {                                               // did we get it right?
+    letter += convertBitfieldToLetter(targetPad); // report right pad
+  }
+  else
+  {                                                 // we have a wrong pad touched or multiple pads touched (of which one is wrong)
+    unsigned char maskedPressed = ~targetPad & pad; // mask out the correct pad
+    if ((maskedPressed & (maskedPressed - 1)) != 0) // check if multiple pads touched
+                                                    //(except for correct one)
+    {
+      // multiple wrong pads touched
+      //just pick one to report, L -> M -> R
+      if (maskedPressed & hub.BUTTON_LEFT)
+        letter += 'L';
+      else if (maskedPressed & hub.BUTTON_MIDDLE)
+        letter += 'M';
+      else if (maskedPressed & hub.BUTTON_RIGHT)
+        letter += 'R';
+    }
+    else
+    {
+      //only one wrong pad touched
+      letter += convertBitfieldToLetter(maskedPressed);
+    }
+  }
+  return letter;
+}
+
+/// The actual RespondingQuickly challenge. This function needs to be called in a loop.
+bool playRespondingQuickly()
 {
   yield_begin();
 
-  static unsigned long gameStartTime, timestampBefore, activityDuration = 0;
-  static unsigned char target = 0;      // bitfield, holds target touchpad
-  static unsigned char retryTarget = 0; // should not be re-initialized
-  static int foodfoodtreatState = 99;
-  static unsigned char pressed = 0; // bitfield, holds pressed touchpad
-  static unsigned long timestampTouchpad = 0;
-  static bool foodtreatWasEaten = false; // store if foodtreat was eaten
+  static unsigned long gameStartTime, timestampTouchpad, timestampBefore, activityDuration = 0;
+  static unsigned char foodtreatState = 99;
+  static unsigned char touchpads[3] = {hub.BUTTON_LEFT, // should not be re-initialized
+                                       hub.BUTTON_MIDDLE,
+                                       hub.BUTTON_RIGHT};
+  static bool retryTarget = false; // should not be re-initialized
   static bool accurate = false;
   static bool timeout = false;
+  static unsigned char pressed[2] = {0, 0};
+  static bool foodtreatWasEaten = false; // store if foodtreat was eaten in last interaction
   static bool challengeComplete = false; // do not re-initialize
-  static int yellow = 60;                // touchpad color, is randomized
-  static int blue = 60;                  // touchpad color, is randomized
 
   // Static variables and constants are only initialized once, and need to be re-initialized
   // on subsequent calls
   gameStartTime = 0;
+  timestampTouchpad = 0;
   timestampBefore = 0;
   activityDuration = 0;
-  target = 0; // bitfield, holds target touchpad
-  foodfoodtreatState = 99;
-  pressed = 0; // bitfield, holds pressed touchpad
-  timestampTouchpad = 0;
-  foodtreatWasEaten = false; // store if foodtreat was eaten
+  foodtreatState = 99;
   accurate = false;
   timeout = false;
-  yellow = 60; // touchpad color, is randomized
-  blue = 60;   // touchpad color, is randomized
+  pressed[0] = 0;
+  pressed[1] = 0;
+  foodtreatWasEaten = false; // store if foodtreat was eaten in last interaction
 
   Log.info("-------------------------------------------");
-  Log.info("Starting new \"Avoiding Unlit Touchpads\" challenge");
-  // Log.info("Current level: %u, successes: %u, number of misses: %u",
-  //     currentLevel, countSuccesses(), countMisses());
+  // Log.info("Starting new \"Responding Quickly\" challenge");
+  Log.info("Current level: %u, successes: %u, num misses: %u", currentLevel,
+           countSuccesses(), countMisses());
 
   gameStartTime = Time.now();
 
@@ -302,7 +344,7 @@ bool playAvoidingUnlitTouchpads()
   //  3. no touchpad is currently pressed
   yield_wait_for((hub.IsReady() &&
                   hub.FoodmachineState() == hub.FOODMACHINE_IDLE &&
-                  !hub.AnyButtonPressed()),
+                  not hub.AnyButtonPressed()),
                  false);
 
   // DI reset occurs if, for example, device  layer detects that touchpads need
@@ -312,21 +354,17 @@ bool playAvoidingUnlitTouchpads()
   // Record start timestamp for performance logging
   timestampBefore = millis();
 
-  yellow = random(20, 90); // pick a yellow for interaction
-  blue = random(20, 90);   // pick a blue for interaction
-
-  if (retryTarget != 0)
+  if (retryTarget)
   {
     Log.info("We're doing a retry interaction");
-    target = retryTarget;
-    hub.SetLights(target, yellow, blue, FLASHING, FLASHING_DUTY_CYCLE);
   }
   else
   {
-    // choose some target lights, and store which targets were randomly chosen
-    target = hub.SetRandomButtonLights(NUM_PADS, yellow, blue, FLASHING,
-                                       FLASHING_DUTY_CYCLE);
+    // randomly shuffle our 3 touchpads in an array
+    random_shuffle(&touchpads[0], &touchpads[3]);
   }
+
+  hub.SetLights(touchpads[0], YELLOW, BLUE, SLEW);
 
   // progress to next state
   timestampTouchpad = millis();
@@ -334,95 +372,114 @@ bool playAvoidingUnlitTouchpads()
   do
   {
     // detect any touchpads currently pressed
-    pressed = hub.AnyButtonPressed();
-    readRFID();
-    yield(false); // use yields statements any time the hub is pausing or waiting
-  } while (
-      (pressed != hub.BUTTON_LEFT // we want it to just be a single touchpad
-       && pressed != hub.BUTTON_MIDDLE && pressed != hub.BUTTON_RIGHT) &&
-      millis() < timestampTouchpad + TIMEOUT_MS && !isManuallyTriggered);
-
-  // record time period for performance logging
-  activityDuration = millis() - timestampBefore;
+    pressed[0] = hub.AnyButtonPressed();
+    yield(false);
+    // Ignore non-target touches
+  } while (!(pressed[0] & touchpads[0])                   // 0 if any pressed touchpad match
+           && millis() < timestampTouchpad + TIMEOUT_MS); // 0 if timed out
 
   hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off lights
 
+  // wait until: no touchpad is currently pressed
+  yield_wait_for((!hub.AnyButtonPressed()), false);
+
   // Check touchpads and accuracy
-  if (pressed == 0)
+  if (pressed[0] == 0)
   {
-    Log.info("No touchpad pressed, we have a timeout");
+    Log.info("No touchpad pressed, first interaction timeout");
     timeout = true;
     accurate = false;
   }
   else
   {
-    // Log.info("Button pressed");
+    Log.info("First interaction: correct touchpad pressed");
     timeout = false;
-    accurate = !((pressed & target) == 0); // will be zero if and only if the
-  }                                        // wrong touchpad was touched
+    hub.PlayAudio(hub.AUDIO_CLICK, 20);
+    hub.SetLights(touchpads[1], YELLOW, BLUE, SLEW);
+    // make sure the player has seen the touchpad
+    yield_sleep_ms(VIEW_WINDOW, false);
 
-  foodtreatWasEaten = false;
+    // progress to next state
+    timestampTouchpad = millis();
 
-  // Check result and consequences
-  if (accurate || isManuallyTriggered)
-  {
-    Log.info("Correct touchpad pressed or manually triggered, dispensing foodtreat");
-    // give the Hub a moment to finish playing the touchpad sound
-    yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
-    // Play "reward" sound
-
-    if (isManuallyTriggered == true)
-    {
-      strcpy(PlayerName, "Okami");
-      hub.PlayAudio(hub.AUDIO_CLICK, 99);
-    }
-    else
-    {
-      strcpy(PlayerName, "Luna");
-      hub.PlayAudio(hub.AUDIO_POSITIVE, 99);
-    }
-
-    // Dispense a foodtreat and wait until the tray is closed again
     do
     {
-      foodfoodtreatState =
-          hub.PresentAndCheckFoodtreat(FOODTREAT_DURATION); // time pres (ms)
-      yield(false);
-    } while (foodfoodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
-             foodfoodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
+      // detect any touchpads currently pressed
+      pressed[1] = hub.AnyButtonPressed();
+      yield(false); // use yields statements any time the hub is pausing or
+                    // waiting
+    } while (       // 0 if any touchpad except interaction1 pad is touched
+        !(pressed[1] & (touchpads[1] | touchpads[2])) &&
+        // 0 if timed out
+        millis() < timestampTouchpad + MAX_REACTION_TIME[currentLevel - 1]);
 
-    // Check if foodtreat was eaten
-    if (foodfoodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
+    hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off lights
+
+    if (pressed[1] == 0)
     {
-      Log.info("Foodtreat was eaten");
-      foodtreatWasEaten = true;
+      Log.info("No touchpad pressed, second interaction timeout");
+      timeout = true;
+      accurate = false;
     }
     else
     {
-      Log.info("Foodtreat was not eaten");
-      foodtreatWasEaten = false;
+      timeout = false;
+      if (pressed[1] == touchpads[1])
+      {
+        accurate = true;
+
+        Log.info("Second interaction: correct touchpad pressed, dispensing foodtreat");
+        // give the Hub a moment to finish playing the touchpad sound
+        yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
+        hub.PlayAudio(hub.AUDIO_CLICK, 99);
+        // give the Hub a moment to finish playing the reward sound
+        yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
+        // if successful interaction, present foodtreat using
+        // PresentAndCheckFoodtreat state machine
+        do
+        {
+          foodtreatState = hub.PresentAndCheckFoodtreat(FOODTREAT_DURATION);
+          yield(false);
+        } while (foodtreatState != hub.PACT_RESPONSE_FOODTREAT_NOT_TAKEN &&
+                 foodtreatState != hub.PACT_RESPONSE_FOODTREAT_TAKEN);
+
+        // Check if foodtreat was eaten
+        if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
+        {
+          Log.info("Foodtreat was eaten");
+          foodtreatWasEaten = true;
+        }
+        else
+        {
+          Log.info("Foodtreat was not eaten");
+          foodtreatWasEaten = false;
+        }
+      }
+      else
+      {
+        Log.info("Second interaction: wrong touchpad pressed");
+        accurate = false;
+        foodtreatWasEaten = false;
+        // give the Hub a moment to finish playing the touchpad sound
+        yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
+        hub.PlayAudio(hub.AUDIO_NEGATIVE, 20);
+        // give the Hub a moment to finish playing the sound
+        yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
+      }
     }
   }
-  else
+
+  // record time period for performance logging
+  activityDuration = millis() - timestampBefore;
+
+  if (!timeout)
   {
-    if (!timeout) // don't play any audio if there's a timeout (no response -> no
-                  // consequence)
-    {
-      Log.info("Wrong touchpad pressed");
-      // give the Hub a moment to finish playing the touchpad sound
-      yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
-      // if unsuccessful interaction: play negative feedback sound at low volume
-      hub.PlayAudio(hub.AUDIO_NEGATIVE, 50);
-      yield_sleep_ms(
-          SOUND_FOODTREAT_DELAY,
-          false); // give the Hub a moment to finish playing the sound
-    }
+    addResultToPerformanceHistory(accurate);
   }
 
   // Check if we're ready for next challenge
   if (currentLevel == MAX_LEVEL)
   {
-    addResultToPerformanceHistory(accurate);
     if (countSuccesses() >= ENOUGH_SUCCESSES)
     {
       Log.info("At MAX level! %u", currentLevel);
@@ -433,7 +490,6 @@ bool playAvoidingUnlitTouchpads()
   else
   {
     // Increase level if foodtreat eaten and good performance in this level
-    addResultToPerformanceHistory(accurate);
     if (countSuccesses() >= ENOUGH_SUCCESSES)
     {
       if (currentLevel < MAX_LEVEL)
@@ -444,16 +500,29 @@ bool playAvoidingUnlitTouchpads()
       }
     }
   }
+  // Decrease level if bad performance in this level
+  if (countMisses() >= TOO_MANY_MISSES)
+  {
+    if (currentLevel > 1)
+    {
+      currentLevel--;
+      Log.info("Leveling DOWN %u", currentLevel);
+      resetPerformanceHistory();
+    }
+  }
 
-  if (!timeout || isManuallyTriggered)
+  if (!timeout)
   {
     // Send report
     Log.info("Sending report");
-
-    String extra = "{\"targets\":\"";
-    extra += convertBitfieldToLetter(target);
-    extra += "\",\"pressed\":\"";
-    extra += convertBitfieldToLetter(pressed);
+    String extra = "{\"targetSeq\":\"";
+    extra += convertBitfieldToLetter(touchpads[0]);
+    extra += convertBitfieldToLetter(touchpads[1]);
+    extra += "\",\"pressedSeq\":\"";
+    // Multiple touches possible, but irrelevant for reporting
+    extra += convertBitfieldToLetter(touchpads[0]);
+    // multiple touches possible, only report a single wrong one if a miss
+    extra += convertBitfieldToSingleLetter(touchpads[1], pressed[1]);
     extra += String::format("\",\"retryGame\":\"%c\"", retryTarget ? '1' : '0');
     if (challengeComplete)
     {
@@ -466,8 +535,7 @@ bool playAvoidingUnlitTouchpads()
                PlayerName,                            // player
                currentLevel,                          // level
                String(accurate),                      // result
-               activityDuration,                      // duration -> linked to level and includes
-                                                      // tray movement
+               activityDuration,                      // duration
                accurate,                              // foodtreat_presented
                foodtreatWasEaten,                     // foodtreatWasEaten
                extra                                  // extra field
@@ -479,19 +547,24 @@ bool playAvoidingUnlitTouchpads()
   if (accurate)
   {
     // Reset retry interaction
-    retryTarget = 0;
+    retryTarget = false;
   }
-  else if (!timeout && (currentLevel > 1))
+  else if (!timeout)
   {
-    retryTarget = target;
+    // Set retry interaction
+    retryTarget = true;
   }
 
   // printPerformanceArray();
   if (isManuallyTriggered == true)
     unsetManuallyTriggered();
 
-  // between interaction wait time
-  yield_sleep_ms((unsigned long)random(1000, 8000), false);
+  if (retryTarget)
+  {
+    // Log.info("in the doghouose");
+    // between interaction wait time if a miss
+    yield_sleep_ms(INTER_GAME_DELAY, false);
+  }
 
   hub.SetDIResetLock(false); // allow DI board to reset if needed between interactions
   yield_finish();
@@ -521,8 +594,8 @@ void loop()
   // spent per loop cycle.
   hub.Run(20);
 
-  // Play 1 interaction of the playAvoidingUnlitTouchpads challenge
-  gameIsComplete = playAvoidingUnlitTouchpads(); // Returns true if level is done
+  // Play 1 interaction of the Responding Quickly challenge
+  gameIsComplete = playRespondingQuickly(); // Will return true if level is done
 
   if (gameIsComplete)
   {
