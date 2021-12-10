@@ -1,30 +1,34 @@
 /**
-  Learning Longer Sequences
-  =========================
+  Matching Two Colors
+  ===================
 
-    This is the tenth challenge from the original CleverPet learning curriculum.
+    This is the eleventh challenge from the original CleverPet learning
+    curriculum.  For the first time, the Hub introduces colors (blue and yellow
+    - yes, dogs and cats can see color!) as a meaningful signal. Each time a
+    touchpad is pressed, its color will change. Your player’s job is to make all
+    the touchpads match within a limited number of overall presses.
 
-    The sequences get longer! Now, your player is challenged to complete
-    patterns of up to nine moves in a row. Beginning with move sequences of
-    length three, the sequences get progressively longer with the player's
-    success, and shorter when the difficulty is too high.
+    Up until now, there was always one correct answer about which pad to touch.
+    This is the first challenge where each puzzle has more than one correct
+    solution, and it showcases your player’s abilities solve problems creatively
+    and in their own way.
 
-    To master this challenge, players need to stay attentive and accurate over
-    progressively longer periods of time. They are given a few "lives" so that
-    one missed touchpad doesn’t always send them back to the beginning.
+    **Challenge logic:** This challenge has 4 levels. Every level has a
+    corresponding maximum number of touches. The challenge uses two different
+    colors, yellow and blue.
 
-    **Challenge logic:** The sequence increases if 12 of the last 15
-    interactions were successes, it also decreases if 12 of the last 15
-    interactions were misses.
+    At the start of an interaction every pad randomly gets one of the 2 colors.
+    Every touch, the color of the touched touchpad advances to the next color.
+    This all happens in a while loop, and with every iteration the state of the
+    lights gets checked for a match of all 3 pads. If a match is found the while
+    loop is exited and the player gets a foodtreat. Every touch decreases the
+    maximum touches counter, if the touches are about to run out, the 'Do' sound
+    will be played. When the remaining touches become zero, the interaction
+    becomes a miss. On a miss the player's next interaction will be a retry
+    interaction with the same starting state.
 
-    The first interaction in the challenge is a "stimulator round" where all 3
-    touchpads light up and any combination of pads can be touched to advance the
-    interaction. The second interaction starts the sequence. At every step of
-    the sequence the current target will light up, along with following target
-    at lower intensity. The target must to be touched exactly, with no
-    combinations or double touches allowed. On a wrong touchpad touch the player
-    loses a "life" and is allowed to continue the interaction. If all 3 of the
-    player's lives run out the interaction becomes a miss.
+    If 4 successful games are played within the last 5 games the player will
+    level up. On 3 missed games in the last 5 games, the player will level down.
 
   Authors: CleverPet Inc.
            Jelmer Tiete <jelmer@tiete.be>
@@ -46,32 +50,35 @@ const char PlayerName[] = "Pet, Clever";
  * These constants (capitalized CamelCase) and variables (camelCase) define the
  * gameplay
  */
-const int HISTORY_LENGTH = 15;   // Number of past interactions to look at for performance
-const int ENOUGH_SUCCESSES = 12; // if successes >= ENOUGH_SUCCESSES level-up
-const int TOO_MANY_MISSES = 12;  // if num misses >= TOO_MANY_MISSES level-down
-const int LIVES_START_STATE = 3; // total number of lives per interaction
-int sequenceLength = 3;          // start sequence length
-const int SEQUENCE_LENGTHMax = 9;
-const int TARGET_INTENSITY = 75;
-const int NEXT_TARGET_INTENSITY = 10;
-const int SLEW = 90;
-const unsigned long FOODTREAT_DURATION = 6000;      // (ms) how long to present foodtreat
-const unsigned long TIMEOUT_STIMULUS_MS = 300000;   // (ms) how long to wait until restarting the
-                                                    // interaction
-const unsigned long TIMEOUT_INTERACTIONS_MS = 5000; // (ms) how long to wait until restarting the
-                                                    // interaction
-const unsigned long INTER_GAME_DELAY = 10000;
+const int STARTING_LEVEL = 1;
+const int MAX_LEVEL = 4;        // Maximum number of levels
+const int HISTORY_LENGTH = 5;   // Number of previous interactions to look at for performance
+const int ENOUGH_SUCCESSES = 4; // if num successes >= ENOUGH_SUCCESSES level-up
+const int TOO_MANY_MISSES = 3;  // if number of misses >= TOO_MANY_MISSES level-down
+const int PADS_PRESSED_MAX[MAX_LEVEL] = {100, 10, 6, 4};
+const unsigned long FOODTREAT_DURATION = 6000; // (ms) how long to present foodtreat
+const unsigned long TIMEOUT_MS = 300002;       // (ms) how long to wait until restarting the interaction
+const unsigned long WRONG_INTERACTION_DELAY = 6000;
+const unsigned char TOUCHPADS[3][2][2] = {
+    //[pad][color][Y,B] //TODO make this easier
+    {{90, 00}, {00, 90}},
+    {{90, 00}, {00, 90}},
+    {{90, 00}, {00, 90}},
+};
+const unsigned char REPORT_COLORS[2] = {'Y', 'B'};
 
 /**
  * Global variables and constants
  * ------------------------------
  */
-const unsigned long SOUND_FOODTREAT_DELAY = 1200; // (ms) delay for reward sound
-const unsigned long SOUND_TOUCHPAD_DELAY = 300;   // (ms) delay for touchpad sound
+const unsigned long SOUND_DO_DELAY = 600;        // (ms) delay between reward sound and foodtreat
+const unsigned long SOUND_FOODTREAT_DELAY = 600; // (ms) delay for reward sound
+const unsigned long SOUND_TOUCHPAD_DELAY = 300;  // (ms) delay for touchpad sound
 
 bool performance[HISTORY_LENGTH] = {0}; // store the progress in this challenge
 unsigned char perfPos = 0;              // to keep our position in the performance array
 unsigned char perfDepth = 0;            // to keep the size of the number of perf numbers to consider
+unsigned char touchpadsColor[3] = {};
 
 // Use primary serial over USB interface for logging output (9600)
 // Choose logging level here (ERROR, WARN, INFO)
@@ -92,7 +99,7 @@ SYSTEM_THREAD(ENABLED);
  * ----------------
  */
 
-/// return the number of successes in performance history for current level
+/// return the number of successful interactions in performance history for current level
 unsigned int countSuccesses()
 {
     unsigned int total = 0;
@@ -102,7 +109,7 @@ unsigned int countSuccesses()
     return total;
 }
 
-/// return the number of misss in performance history for current level
+/// return the number of misses in performance history for current level
 unsigned int countMisses()
 {
     unsigned int total = 0;
@@ -121,7 +128,7 @@ void resetPerformanceHistory()
     perfDepth = 0;
 }
 
-/// add a interaction result to the performance history
+/// add an interaction result to the performance history
 void addResultToPerformanceHistory(bool entry)
 {
     // Log.info("Adding %u", entry);
@@ -134,8 +141,7 @@ void addResultToPerformanceHistory(bool entry)
         perfPos = 0;
     }
     // Log.info("perfPos %u, perfDepth %u", perfPos, perfDepth);
-    Log.info("New successes: %u, misss: %u", countSuccesses(),
-             countMisses());
+    Log.info("New successes: %u, misses: %u", countSuccesses(), countMisses());
 }
 
 /// print the performance history for debugging
@@ -150,11 +156,42 @@ void printPerformanceArray()
     }
     Serial.printf("}\n");
 }
+
+/// advance a touchpad to the next color
+void advanceTouchpad(unsigned char pad)
+{
+    touchpadsColor[pad]++;
+    if (touchpadsColor[pad] > 1)
+        touchpadsColor[pad] = 0;
+}
+
+/// update the touchpad lights on the hub
+void updateTouchpadLights()
+{
+    hub.SetLights(hub.LIGHT_LEFT, TOUCHPADS[0][touchpadsColor[0]][0],
+                  TOUCHPADS[0][touchpadsColor[0]][1], 0);
+    hub.SetLights(hub.LIGHT_MIDDLE, TOUCHPADS[1][touchpadsColor[1]][0],
+                  TOUCHPADS[1][touchpadsColor[1]][1], 0);
+    hub.SetLights(hub.LIGHT_RIGHT, TOUCHPADS[2][touchpadsColor[2]][0],
+                  TOUCHPADS[2][touchpadsColor[2]][1], 0);
+};
+
+/// check if all touchpad colors match
+bool checkMatch()
+{
+    if ((touchpadsColor[0] == touchpadsColor[1]) && (touchpadsColor[1] == touchpadsColor[2]))
+        return true;
+    return false;
+}
+
 /// converts a bitfield of pressed touchpads to letters
-/// multiple consecutive touches are possible and will be reported L -> M - > R
+/// multiple consecutive touches will be reported as X
 /// @returns String
 String convertBitfieldToLetter(unsigned char pad)
 {
+    if ((pad & (pad - 1)) != 0) // targetPad has multiple pads set
+        return "X";
+
     String letters = "";
     if (pad & hub.BUTTON_LEFT)
         letters += 'L';
@@ -165,228 +202,181 @@ String convertBitfieldToLetter(unsigned char pad)
     return letters;
 }
 
-/// converts requested touchpad bitfield and pressed touchpad bitfield to a
-/// letter. Requested bitfield should have only one bit set. Touched pad
-/// bitfield can have multiple bits set. If correct, the correct pad will be
-/// returned, if wrong only the wrong pad will be returned, if multiple wrong
-/// pads pressed, only one wrong pad will be returned in order L -> M -> R
-/// @returns String
-String convertBitfieldToSingleLetter(unsigned char targetPad, unsigned char pad)
-{
-    if ((targetPad & (targetPad - 1)) != 0) // error targetPad has multiple pads set
-        return "X";
-
-    String letter = "";
-    if (targetPad == pad)
-    {                                                 // did we get it right?
-        letter += convertBitfieldToLetter(targetPad); // report right pad
-    }
-    else
-    {                                                   // we have a wrong pad touched or multiple pads touched (of which one is wrong)
-        unsigned char maskedPressed = ~targetPad & pad; // mask out the correct pad
-        // check if multiple pads touched (except for correct one)
-        if ((maskedPressed & (maskedPressed - 1)) != 0)
-        {
-            // multiple wrong pads touched
-            //just pick one to report, L -> M -> R
-            if (maskedPressed & hub.BUTTON_LEFT)
-                letter += 'L';
-            else if (maskedPressed & hub.BUTTON_MIDDLE)
-                letter += 'M';
-            else if (maskedPressed & hub.BUTTON_RIGHT)
-                letter += 'R';
-        }
-        else
-        {
-            //only one wrong pad touched
-            letter += convertBitfieldToLetter(maskedPressed);
-        }
-    }
-    return letter;
-}
-
-/// The actual LearningLongerSequences function. This function needs to be called in a loop.
-bool playLearningLongerSequences()
+/// The actual MatchingTwoColors challenge. This function needs to be called in a loop.
+bool playMatchingTwoColors()
 {
     yield_begin();
 
     static unsigned long timestampBefore, timestampTouchpad, gameStartTime, activityDuration = 0;
     static unsigned char foodtreatState = 99;
-    static int lives = LIVES_START_STATE;
-    static unsigned char touchpads[3] = {hub.BUTTON_LEFT,
-                                         hub.BUTTON_MIDDLE,
-                                         hub.BUTTON_RIGHT};
-    static unsigned char sequence_pos = 0;
-    static unsigned char touchpad_sequence[SEQUENCE_LENGTHMax] = {};
-    static unsigned char pressed[SEQUENCE_LENGTHMax + 1] = {};
+    static unsigned char touchpadsColorStart[3] = {};
+    static unsigned char pressed = 0;
+    static int currentLevel = STARTING_LEVEL;
+    static int pads_pressed = 0;
+    static bool match = false;
+    static bool retryGame = false; // should not be re-initialized
     static bool accurate = false;
     static bool timeout = false;
     static bool foodtreatWasEaten = false; // store if foodtreat was eaten in last interaction
     static bool challengeComplete = false; // do not re-initialize
+    static String pressedSeq = "";
 
-    // Static variable and constants are only initialized once, and need to be re-initialized
+    // Static variables and constants are only initialized once, and need to be re-initialized
     // on subsequent calls
     timestampBefore = 0;
-    timestampTouchpad = 0;
     gameStartTime = 0;
     activityDuration = 0;
     foodtreatState = 99;
-    touchpads[0] = hub.BUTTON_LEFT;
-    touchpads[1] = hub.BUTTON_MIDDLE;
-    touchpads[2] = hub.BUTTON_RIGHT;
-    sequence_pos = 0;
-    // reset sequence, lives and pressed touchpads
-    fill(touchpad_sequence, touchpad_sequence + SEQUENCE_LENGTHMax, 0);
-    fill(pressed, pressed + SEQUENCE_LENGTHMax + 1, 0);
-    lives = LIVES_START_STATE;
+    match = false;
+    pads_pressed = 0;
+    fill(touchpadsColorStart, touchpadsColorStart + 3, 0);
     accurate = false;
     timeout = false;
     foodtreatWasEaten = false; // store if foodtreat was eaten in last interaction
+    pressed = 0;
+    timestampTouchpad = 0;
+    pressedSeq = "";
 
     Log.info("-------------------------------------------");
-    // Log.info("Starting new \"Learning Longer Sequences\" challenge");
-    // Log.info("Current length: %u, successes: %u, num misses: %u",
-    // sequenceLength, countSuccesses(), countMisses());
+    // Log.info("Starting new \"Matching Two Colors\" challenge");
+    // Log.info("Current level: %u, successes: %u, number of misses: %u",
+    // currentLevel, countSuccesses(), countMisses());
+
+    gameStartTime = Time.now();
 
     // before starting interaction, wait until:
     //  1. device layer is ready (in a good state)
-    //  2. foodmachine is "idle", meaning it is not spinning or dispensing foodtreat
+    //  2. foodmachine is "idle", meaning it is not spinning or dispensing
     //      and tray is retracted (see FOODMACHINE_... constants)
-    //  3. no button is currently pressed
+    //  3. no touchpad is currently pressed
     yield_wait_for((hub.IsReady() && hub.FoodmachineState() == hub.FOODMACHINE_IDLE && not hub.AnyButtonPressed()), false);
 
     // DI reset occurs if, for example, device  layer detects that touchpads need re-calibration
     hub.SetDIResetLock(true);
 
-    gameStartTime = Time.now();
-
-    // fill touchpad_sequence
-    for (int i = 0; i < sequenceLength; ++i)
+    // Rndomly pick start state, except on retry interaction
+    if (!retryGame)
     {
-        random_shuffle(&touchpads[0], &touchpads[3]);
-        touchpad_sequence[i] = touchpads[0];
-    }
-
-    hub.SetLights(hub.LIGHT_BTNS, TARGET_INTENSITY, TARGET_INTENSITY, SLEW);
-
-    // progress to next state
-    timestampTouchpad = millis();
-
-    do
-    {
-        // detect any buttons currently pressed
-        pressed[0] = hub.AnyButtonPressed();
-        // use yields statements any time the hub is pausing or waiting
-        yield(false);
-    } while (!(pressed[0] != 0) //0 if any touchpad is touched
-             //0 if timed out
-             && millis() < timestampTouchpad + TIMEOUT_STIMULUS_MS);
-
-    hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off all touchpad lights
-
-    // wait until: no button is currently pressed
-    yield_wait_for((!hub.AnyButtonPressed()), false);
-
-    if (pressed[0] != 0)
-    {
-        Log.info("Stimulator touchpad touched, starting interactions");
-        sequence_pos = 0;
-        timeout = false;
-        accurate = true;
+        do
+        {
+            touchpadsColor[0] = random(0, 2);
+            touchpadsColor[1] = random(0, 2);
+            touchpadsColor[2] = random(0, 2);
+        } while (checkMatch());
     }
     else
     {
-        Log.info("No touchpad pressed, timeout");
-        sequence_pos = sequenceLength; // skip the interactions
-        accurate = false;
-        timeout = true;
+        Log.info("Doing a retry interaction");
     }
+
+    // save start state for report
+    copy(begin(touchpadsColor), end(touchpadsColor), begin(touchpadsColorStart));
+
+    Log.info("Start state: %c%c%c", REPORT_COLORS[touchpadsColor[0]],
+             REPORT_COLORS[touchpadsColor[1]],
+             REPORT_COLORS[touchpadsColor[2]]);
+
+    updateTouchpadLights();
+
+    hub.SetButtonAudioEnabled(true);
 
     // Record start timestamp for performance logging
     timestampBefore = millis();
 
-    // Start main interactions loop
-    while (sequence_pos < sequenceLength)
+    // main while loop
+    while (match == false)
     {
-        Log.info("Interaction %d. Target touchpad: %c%c%c", (sequence_pos + 1),
-                 (touchpad_sequence[sequence_pos] & hub.BUTTON_LEFT) ? '1' : '0',
-                 (touchpad_sequence[sequence_pos] & hub.BUTTON_MIDDLE) ? '1' : '0',
-                 (touchpad_sequence[sequence_pos] & hub.BUTTON_RIGHT) ? '1' : '0');
-
-        // wait until: no button is currently pressed
-        yield_wait_for((!hub.AnyButtonPressed()), false);
-        // TODO fix slobber
-
-        // set next touchpad and this touchpad
-        if (sequence_pos < sequenceLength - 1)
-            hub.SetLights(touchpad_sequence[sequence_pos + 1],
-                          NEXT_TARGET_INTENSITY, NEXT_TARGET_INTENSITY, SLEW);
-        hub.SetLights(touchpad_sequence[sequence_pos], TARGET_INTENSITY, TARGET_INTENSITY, SLEW);
-
-        // progress to next state
         timestampTouchpad = millis();
         do
         {
-            // detect any buttons currently pressed
-            // sequence_pos = 0 already stores stimulus button press
-            pressed[sequence_pos + 1] = hub.AnyButtonPressed();
-            yield(false);                                                    // use yields statements any time the hub is pausing or waiting
-        } while (!(pressed[sequence_pos + 1] != 0)                           //0 if any touchpad is touched
-                 && millis() < timestampTouchpad + TIMEOUT_INTERACTIONS_MS); //0 if timed out
+            yield(false); // use yields statements any time the hub is pausing or waiting
+            // detect any touchpads currently pressed
+            pressed = hub.AnyButtonPressed();
+        } while (!(pressed != 0)                                //0 if any touchpad is touched
+                 && millis() < timestampTouchpad + TIMEOUT_MS); //0 if timed out
 
-        if (pressed[sequence_pos + 1] == 0)
+        activityDuration = millis() - timestampBefore;
+
+        if (pressed == hub.BUTTON_LEFT)
         {
-            Log.info("No touchpad pressed, timeout");
+            Log.info("Left touchpad pressed");
+            advanceTouchpad(0);
+        }
+        else if (pressed == hub.BUTTON_MIDDLE)
+        {
+            Log.info("Middle touchpad pressed");
+            advanceTouchpad(1);
+        }
+        else if (pressed == hub.BUTTON_RIGHT)
+        {
+            Log.info("Right touchpad pressed");
+            advanceTouchpad(2);
+        }
+        else if (pressed == 0)
+        {
             timeout = true;
             accurate = false;
-            sequence_pos = sequenceLength;
-        }
-        else if (pressed[sequence_pos + 1] == touchpad_sequence[sequence_pos])
-        {
-            Log.info("Correct touchpad pressed");
-            // turn off lights on last touchpad
-            hub.SetLights(touchpad_sequence[sequence_pos], 0, 0, 0);
-            sequence_pos++;
-            accurate = true;
-            timeout = false;
         }
         else
-        { // asuming wrong
-            Log.info("Wrong button pressed");
-            timeout = false;
-            lives--;
-            if (lives == 0)
-            {
-                Log.info("Lives depleated");
-                accurate = false;
-                sequence_pos = sequenceLength;
-            }
-            else
-            {
-                Log.info("Deducted life. Lives left: %d. Re-interaction", lives);
-                // lost life but not done
-                // give the Hub a moment to finish playing the touchpad sound
-                yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
-                hub.PlayAudio(hub.AUDIO_NEGATIVE, 60);
-                // give the Hub a moment to finish playing the sound
-                yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
-                //reset the touched pad
-                pressed[sequence_pos + 1] = 0;
-            }
+        {
+            // double pad press
         }
+
+        // add our press to the reporting sequence
+        pressedSeq += convertBitfieldToLetter(pressed);
+
+        // update lights
+        updateTouchpadLights();
+
+        // increase pressed counter
+        pads_pressed++;
+        Log.info("Remaining presses: %u", PADS_PRESSED_MAX[currentLevel - 1] - pads_pressed);
+        // check for timeout
+        if (activityDuration > TIMEOUT_MS)
+        {
+            Log.info("Timeout");
+            timeout = true;
+            break;
+        }
+        // check for match
+        if (checkMatch())
+        {
+            Log.info("We have a match");
+            match = true;
+            break;
+        }
+        // check for last tries
+        if (pads_pressed >= PADS_PRESSED_MAX[currentLevel - 1] - 2)
+        {
+            // Log.info("almost out");
+            // give the Hub a moment to finish playing the touchpad sound
+            yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
+            hub.PlayAudio(hub.AUDIO_DO, 60);
+            // give the Hub a moment to finish playing the sound
+            yield_sleep_ms(SOUND_DO_DELAY, false);
+        }
+        //check for max tries
+        if (pads_pressed == PADS_PRESSED_MAX[currentLevel - 1])
+        {
+            Log.info("Max presses");
+            break;
+        }
+
+        // wait until: no touchpad is currently pressed
+        yield_wait_for((!hub.AnyButtonPressed()), false);
     }
 
-    // record time period for performance logging
-    activityDuration = millis() - timestampBefore;
-
-    hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off all touchpad lights
+    // check if we have a match on all touchpads
+    accurate = checkMatch();
 
     if (accurate)
     {
-        Log.info("All interactions passed, dispensing foodtreat");
+        timeout = false; // rare case
+        retryGame = false;
+        Log.info("Match, dispensing foodtreat");
         // give the Hub a moment to finish playing the touchpad sound
         yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
-        hub.PlayAudio(hub.AUDIO_POSITIVE, 60);
+        hub.PlayAudio(hub.AUDIO_POSITIVE, 80);
         // give the Hub a moment to finish playing the reward sound
         yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
         do
@@ -399,34 +389,33 @@ bool playLearningLongerSequences()
         // Check if foodtreat was eaten
         if (foodtreatState == hub.PACT_RESPONSE_FOODTREAT_TAKEN)
         {
-            Log.info("Treat was eaten");
+            Log.info("Foodtreat was eaten");
             foodtreatWasEaten = true;
         }
         else
         {
-            Log.info("Treat was not eaten");
+            Log.info("Foodtreat was not eaten");
             foodtreatWasEaten = false;
         }
     }
     else
     {
+        retryGame = true;
         if (!timeout)
         {
             // give the Hub a moment to finish playing the touchpad sound
             yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
-            hub.PlayAudio(hub.AUDIO_NEGATIVE, 60);
-            // give the Hub a moment to finish playing the sound
+            hub.PlayAudio(hub.AUDIO_NEGATIVE, 80);
+            // give the Hub a moment to finish playing the reward sound
             yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
-            foodtreatWasEaten = false;
+            // turn off touchpads sound and light during time-out
+            hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0);
+            hub.SetButtonAudioEnabled(false);
+            yield_sleep_ms(WRONG_INTERACTION_DELAY, false);
         }
     }
 
-    if (sequenceLength == 9)
-    {
-        resetPerformanceHistory();
-        Log.info("At MAX length! %u", sequenceLength);
-        challengeComplete = true;
-    }
+    hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0); // turn off all touchpad lights
 
     // keep track of performance
     if (!timeout)
@@ -434,45 +423,52 @@ bool playLearningLongerSequences()
         addResultToPerformanceHistory(accurate);
     }
 
-    // adjust sequence length according to performance
-    if (countSuccesses() >= ENOUGH_SUCCESSES)
+    // Check if we're ready for next challenge
+    if (currentLevel == MAX_LEVEL)
     {
-        if (sequenceLength < SEQUENCE_LENGTHMax)
+        if (countSuccesses() >= ENOUGH_SUCCESSES)
         {
-            Log.info("Increasing sequence length! %u", sequenceLength);
-            sequenceLength++;
+            Log.info("At MAX level! %u", currentLevel);
+            challengeComplete = true;
+            resetPerformanceHistory();
         }
-        resetPerformanceHistory();
     }
-    else if (countMisses() >= TOO_MANY_MISSES)
+
+    if (currentLevel < MAX_LEVEL)
     {
-        if (sequenceLength > 3)
+        if (countSuccesses() >= ENOUGH_SUCCESSES)
         {
-            Log.info("Decreasing sequence length! %u", sequenceLength);
-            sequenceLength--;
+            currentLevel++;
+            Log.info("Leveling UP %u", currentLevel);
+            retryGame = false;
+            resetPerformanceHistory();
         }
-        resetPerformanceHistory();
+    }
+
+    if (countMisses() >= TOO_MANY_MISSES)
+    {
+        if (currentLevel > 1)
+        {
+            currentLevel--;
+            Log.info("Leveling DOWN %u", currentLevel);
+            retryGame = false;
+            resetPerformanceHistory();
+        }
     }
 
     // Send report
-    // TODO this report might get too long for particle publish size limits
     if (!timeout)
     {
         Log.info("Sending report");
 
-        String extra = "{";
-        extra += "\"targetSeq\":\"";
-        for (int i = 0; i < sequenceLength; ++i)
-        {
-            extra += convertBitfieldToLetter(touchpad_sequence[i]);
-        }
-        extra += "\",\"pressedSeq\":\"";
-        // TODO also report wrong touches that deducted lives?
-        for (int i = 0; i < sequenceLength; ++i)
-        {
-            extra += convertBitfieldToSingleLetter(touchpad_sequence[i], pressed[i + 1]);
-        }
-        extra += String::format("\",\"lives\":%d", lives);
+        String extra = String::format(
+            "{\"startState\":\"%c%c%c\",\"pressedSeq\":\"%s\",\"presses\":%u,"
+            "\"retryGame\":%c",
+            REPORT_COLORS[touchpadsColorStart[0]],
+            REPORT_COLORS[touchpadsColorStart[1]],
+            REPORT_COLORS[touchpadsColorStart[2]], pressedSeq.c_str(),
+            pads_pressed,
+            retryGame ? '1' : '0'); // TODO this is the new value
         if (challengeComplete)
         {
             extra += ",\"challengeComplete\":1";
@@ -484,7 +480,7 @@ bool playLearningLongerSequences()
         hub.Report(Time.format(gameStartTime,
                                TIME_FORMAT_ISO8601_FULL), // play_start_time
                    PlayerName,                            // player
-                   sequenceLength,                        // level
+                   currentLevel,                          // level
                    String(accurate),                      // result
                    activityDuration,                      // duration
                    accurate,                              // foodtreat_presented
@@ -494,12 +490,6 @@ bool playLearningLongerSequences()
     }
 
     // printPerformanceArray();
-
-    if (!accurate)
-    {
-        // between interaction time if wrong
-        yield_sleep_ms(INTER_GAME_DELAY, false);
-    }
 
     hub.SetDIResetLock(false); // allow DI board to reset if needed between interactions
     yield_finish();
@@ -528,9 +518,8 @@ void loop()
     // spent per loop cycle.
     hub.Run(20);
 
-    // Play 1 interaction of the Learning Longer Sequences challenge
-    // Will return true if level is done
-    gameIsComplete = playLearningLongerSequences();
+    // Play 1 interaction of the Matching Two Colors challenge
+    gameIsComplete = playMatchingTwoColors(); // Returns true if level is done
 
     if (gameIsComplete)
     {
