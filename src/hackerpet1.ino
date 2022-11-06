@@ -41,7 +41,7 @@
 #include <algorithm>
 
 // Set this to the name of your player (dog, cat, etc.)
-const char PlayerName[] = "Pet, Clever";
+const char PlayerName[] = "Luna";
 
 /**
  * Challenge settings
@@ -55,7 +55,7 @@ const int MAX_LEVEL = 4;        // Maximum number of levels
 const int HISTORY_LENGTH = 5;   // Number of previous interactions to look at for performance
 const int ENOUGH_SUCCESSES = 4; // if num successes >= ENOUGH_SUCCESSES level-up
 const int TOO_MANY_MISSES = 3;  // if number of misses >= TOO_MANY_MISSES level-down
-const int PADS_PRESSED_MAX[MAX_LEVEL] = {100, 10, 6, 4};
+const int PADS_PRESSED_MAX[MAX_LEVEL] = {2, 2, 2, 2};
 const unsigned long FOODTREAT_DURATION = 6000; // (ms) how long to present foodtreat
 const unsigned long TIMEOUT_MS = 300002;       // (ms) how long to wait until restarting the interaction
 const unsigned long WRONG_INTERACTION_DELAY = 6000;
@@ -162,7 +162,7 @@ void advanceTouchpad(unsigned char pad)
 {
     touchpadsColor[pad]++;
     if (touchpadsColor[pad] > 1)
-        touchpadsColor[pad] = 0;
+        touchpadsColor[pad] = 1;
 }
 
 /// update the touchpad lights on the hub
@@ -375,10 +375,10 @@ bool playMatchingTwoColors()
         retryGame = false;
         Log.info("Match, dispensing foodtreat");
         // give the Hub a moment to finish playing the touchpad sound
-        yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
+        //yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
         hub.PlayAudio(hub.AUDIO_POSITIVE, 80);
         // give the Hub a moment to finish playing the reward sound
-        yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
+        //yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
         do
         {
             foodtreatState = hub.PresentAndCheckFoodtreat(FOODTREAT_DURATION);
@@ -404,10 +404,10 @@ bool playMatchingTwoColors()
         if (!timeout)
         {
             // give the Hub a moment to finish playing the touchpad sound
-            yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
+            //yield_sleep_ms(SOUND_TOUCHPAD_DELAY, false);
             hub.PlayAudio(hub.AUDIO_NEGATIVE, 80);
             // give the Hub a moment to finish playing the reward sound
-            yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
+            // yield_sleep_ms(SOUND_FOODTREAT_DELAY, false);
             // turn off touchpads sound and light during time-out
             hub.SetLights(hub.LIGHT_BTNS, 0, 0, 0);
             hub.SetButtonAudioEnabled(false);
